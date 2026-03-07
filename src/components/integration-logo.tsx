@@ -128,6 +128,18 @@ const LOGOS: Record<string, (size: number) => React.ReactNode> = {
       />
     </svg>
   ),
+
+  amazon: (size) => (
+    <img
+      src="/amazon-logomark.png"
+      alt=""
+      width={size}
+      height={size}
+      style={{ display: "block" }}
+      loading="lazy"
+      decoding="async"
+    />
+  ),
 };
 
 /**
