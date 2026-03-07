@@ -3,6 +3,7 @@
  */
 
 import { format } from "date-fns";
+import { createHmac, createHash } from "crypto";
 import type { AmazonOAuthConfig, AmazonTokens } from "./types";
 import { getValidAccessToken } from "./auth";
 
@@ -19,26 +20,17 @@ const SP_API_ENDPOINTS: Record<string, string> = {
  * Marketplace ID to region mapping.
  */
 const MARKETPLACE_REGIONS: Record<string, string> = {
-  // North America
   ATVPDKIKX0DER: "NA", // US
   A2EUQ1WTGCTBG2: "NA", // Canada
   A1AM78C64UM0Y8: "NA", // Mexico
-  A3H6H5LH9DT6ZS: "NA", // Brazil
-  // Europe
   A1PA6795UKMFR9: "EU", // Germany
   A1F83G8C2ARO7P: "EU", // UK
   A13V1IB3VIYZZH: "EU", // France
   APJ6JRA9NG5V4: "EU", // Italy
   A1RKKUPIH5469F: "EU", // Spain
-  A21TJRUUN4KGV: "EU", // India
-  A33A1BTTW4QD5T: "EU", // Turkey
-  A2V0Q9T4A0BY8Y: "EU", // UAE
-  A17E79C6D8DWNP: "EU", // Saudi Arabia
-  // Far East
   A1VC38T7YXB528: "FE", // Japan
   A19VAU5U5O7RUS: "FE", // Singapore
   A39IBJ37TRP1C6: "FE", // Australia
-  A2Q3Y263D00KWC: "FE", // Brazil (sometimes FE)
 };
 
 /**
@@ -56,7 +48,6 @@ export class AmazonSPAPIClient {
   ) {
     this.config = config;
     this.tokens = tokens;
-    // Determine region from marketplace ID
     this.region = config.region || MARKETPLACE_REGIONS[marketplaceId] || "NA";
   }
 
@@ -70,6 +61,25 @@ export class AmazonSPAPIClient {
   }
 
   /**
+   * Simple SHA-256 hash.
+   */
+  private sha256Hash(message: string): string {
+    return createHash("sha256").update(message).digest("hex");
+  }
+
+  /**
+   * Calculate AWS Signature Version 4 signature.
+   */
+  private calculateSignature(stringToSign: string, dateStamp: string): string {
+    const kSecret = `AWS4${this.config.clientSecret}`;
+    const kDate = createHmac("sha256", kSecret).update(dateStamp).digest();
+    const kRegion = createHmac("sha256", kDate).update(this.region).digest();
+    const kService = createHmac("sha256", kRegion).update("execute-api").digest();
+    const kSigning = createHmac("sha256", kService).update("aws4_request").digest();
+    return createHmac("sha256", kSigning).update(stringToSign).digest("hex");
+  }
+
+  /**
    * Make an authenticated SP-API request.
    * Handles token refresh automatically.
    */
@@ -77,18 +87,15 @@ export class AmazonSPAPIClient {
     path: string,
     params?: Record<string, string>
   ): Promise<T> {
-    // Ensure we have a valid access token
     const { accessToken, refreshed } = await getValidAccessToken(
       this.config,
       this.tokens
     );
 
-    // If token was refreshed, the caller should update their stored tokens
     if (refreshed) {
       console.log("[Amazon SP-API] Access token refreshed");
     }
 
-    // Build the URL
     const baseUrl = this.getBaseUrl();
     const url = new URL(`${baseUrl}${path}`);
 
@@ -100,19 +107,17 @@ export class AmazonSPAPIClient {
       }
     }
 
-    // Get current timestamp for headers
     const now = new Date();
     const amzDate = format(now, "yyyyMMdd'T'HHmmss'Z'");
     const dateStamp = format(now, "yyyyMMdd");
 
-    // Create canonical request
     const method = "GET";
     const canonicalUri = path;
     const canonicalQuerystring = url.searchParams.toString();
     const canonicalHeaders = `host:${url.host}\nx-amz-access-token:${accessToken}\nx-amz-date:${amzDate}\n`;
     const signedHeaders = "host;x-amz-access-token;x-amz-date";
 
-    const payloadHash = await this.sha256Hash("");
+    const payloadHash = this.sha256Hash("");
     const canonicalRequest = [
       method,
       canonicalUri,
@@ -122,26 +127,19 @@ export class AmazonSPAPIClient {
       payloadHash,
     ].join("\n");
 
-    // Create string to sign
     const algorithm = "AWS4-HMAC-SHA256";
     const credentialScope = `${dateStamp}/${this.region}/execute-api/aws4_request`;
     const stringToSign = [
       algorithm,
       amzDate,
       credentialScope,
-      await this.sha256Hash(canonicalRequest),
+      this.sha256Hash(canonicalRequest),
     ].join("\n");
 
-    // Calculate signature
-    const signature = await this.calculateSignature(
-      stringToSign,
-      dateStamp
-    );
+    const signature = this.calculateSignature(stringToSign, dateStamp);
 
-    // Create authorization header
     const authorization = `${algorithm} Credential=${this.config.clientId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-    // Make the request
     const response = await fetch(url.toString(), {
       method,
       headers: {
@@ -160,59 +158,6 @@ export class AmazonSPAPIClient {
     }
 
     return response.json() as Promise<T>;
-  }
-
-  /**
-   * Simple SHA-256 hash (using Web Crypto API via fetch).
-   */
-  private async sha256Hash(message: string): Promise<string> {
-    const msgBuffer = new TextEncoder().encode(message);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
-
-  /**
-   * Calculate AWS Signature Version 4 signature.
-   */
-  private async calculateSignature(
-    stringToSign: string,
-    dateStamp: string
-  ): Promise<string> {
-    const kSecret = new TextEncoder().encode(`AWS4${this.config.clientSecret}`);
-    const kDate = await this.hmacSha256(kSecret, dateStamp);
-    const kRegion = await this.hmacSha256(kDate, this.region);
-    const kService = await this.hmacSha256(kRegion, "execute-api");
-    const kSigning = await this.hmacSha256(kService, "aws4_request");
-    const signature = await this.hmacSha256(kSigning, stringToSign);
-    return this.buf2hex(signature);
-  }
-
-  /**
-   * HMAC-SHA256 implementation.
-   */
-  private async hmacSha256(
-    key: Uint8Array,
-    data: string
-  ): Promise<Uint8Array> {
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      key,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    const signature = await cryptoKey.sign(new TextEncoder().encode(data));
-    return new Uint8Array(signature);
-  }
-
-  /**
-   * Convert buffer to hex string.
-   */
-  private buf2hex(buffer: Uint8Array): string {
-    return Array.from(buffer)
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
   }
 
   /**

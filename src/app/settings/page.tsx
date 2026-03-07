@@ -3,19 +3,14 @@
 import { useEffect, useState } from "react";
 import { useIntegrations, useProjectGroups } from "@/hooks/use-metrics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AmazonConnectButton } from "@/components/settings/amazon-connect-button";
 import { AddAccountDialog } from "@/components/settings/add-account-dialog";
 import { AccountList } from "@/components/settings/account-list";
-import { Separator } from "@/components/ui/separator";
-import { apiDelete, apiPatch, apiPost } from "@/lib/api-client";
 import { IntegrationLogo } from "@/components/integration-logo";
 import { ProjectGroupsManager } from "@/components/settings/project-groups-manager";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { apiDelete, apiPatch, apiPost } from "@/lib/api-client";
 import {
   applyAppearanceToRoot,
   APPEARANCE_STORAGE_KEY,
@@ -25,6 +20,86 @@ import {
   normalizeAppearance,
   type Appearance,
 } from "@/lib/appearance";
+
+function IntegrationCard({
+  integration,
+  onAccountAdded,
+  onDelete,
+  onToggle,
+  onSync,
+}: {
+  integration: any;
+  onAccountAdded: () => void;
+  onDelete: (id: string) => void;
+  onToggle: (id: string, active: boolean) => void;
+  onSync: (id: string) => void;
+}) {
+  const isAmazon = integration.id === "amazon";
+  // For now, we assume OAuth is configured if the env vars exist
+  // In production, this should come from the API
+  const oauthConfigured = typeof window !== "undefined" && !!(
+    (window as any).ENV?.AMAZON_LWA_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_AMAZON_OAUTH_ENABLED === "true"
+  );
+
+  return (
+    <Card
+      className="relative w-full gap-3 overflow-hidden border-border/60 bg-gradient-to-br from-card via-card to-muted/40 py-4 shadow-sm ring-1 ring-border/40"
+    >
+      <div
+        className="absolute -right-10 -top-10 h-36 w-36 rounded-full blur-2xl"
+        style={{ backgroundColor: `${integration.color}18` }}
+      />
+      <CardHeader className="relative flex flex-row items-center justify-between gap-4 pb-3">
+        <div className="flex items-center gap-4">
+          <div
+            className="flex h-12 w-12 flex-none items-center justify-center rounded-full border border-border/60 bg-background/80 shadow-sm"
+            style={{ boxShadow: `0 10px 30px ${integration.color}22` }}
+          >
+            <IntegrationLogo integration={integration.name} size={22} />
+          </div>
+          <div>
+            <CardTitle className="text-base">
+              {integration.name}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {integration.description}
+            </p>
+          </div>
+        </div>
+        
+        {isAmazon ? (
+          <AmazonConnectButton
+            integrationId={integration.id}
+            integrationName={integration.name}
+            onAccountAdded={onAccountAdded}
+            oauthConfigured={oauthConfigured}
+          />
+        ) : (
+          <AddAccountDialog
+            integrationId={integration.id}
+            integrationName={integration.name}
+            credentials={integration.credentials}
+            requiredPermissions={integration.requiredPermissions}
+            onAccountAdded={onAccountAdded}
+          />
+        )}
+      </CardHeader>
+
+      <Separator className="my-2 bg-border/60" />
+      <CardContent className="relative pt-1">
+        <div className="mt-2">
+          <AccountList
+            accounts={integration.accounts}
+            onDelete={onDelete}
+            onToggle={onToggle}
+            onSync={onSync}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SettingsPage() {
   const { data: integrations, loading, refetch } = useIntegrations();
@@ -42,7 +117,6 @@ export default function SettingsPage() {
     if (!confirm("Are you sure you want to delete this account? This will remove all associated data.")) {
       return;
     }
-
     await apiDelete(`/api/integrations/${accountId}`);
     refetch();
   };
@@ -123,52 +197,14 @@ export default function SettingsPage() {
 
               <div className="grid gap-6 md:grid-cols-2">
                 {integrations.map((integration: any) => (
-                  <Card
+                  <IntegrationCard
                     key={integration.id}
-                    className="relative w-full gap-3 overflow-hidden border-border/60 bg-gradient-to-br from-card via-card to-muted/40 py-4 shadow-sm ring-1 ring-border/40"
-                  >
-                    <div
-                      className="absolute -right-10 -top-10 h-36 w-36 rounded-full blur-2xl"
-                      style={{ backgroundColor: `${integration.color}18` }}
-                    />
-                    <CardHeader className="relative flex flex-row items-center justify-between gap-4 pb-3">
-                      <div className="flex items-center gap-4">
-                        <div
-                          className="flex h-12 w-12 flex-none items-center justify-center rounded-full border border-border/60 bg-background/80 shadow-sm"
-                          style={{ boxShadow: `0 10px 30px ${integration.color}22` }}
-                        >
-                          <IntegrationLogo integration={integration.name} size={22} />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base">
-                            {integration.name}
-                          </CardTitle>
-                          <p className="text-sm text-muted-foreground">
-                            {integration.description}
-                          </p>
-                        </div>
-                      </div>
-                      <AddAccountDialog
-                        integrationId={integration.id}
-                        integrationName={integration.name}
-                        credentials={integration.credentials}
-                        requiredPermissions={integration.requiredPermissions}
-                        onAccountAdded={refetch}
-                      />
-                    </CardHeader>
-
-                    <Separator className="my-2 bg-border/60" />
-                    <CardContent className="relative pt-1">
-                      <div className="mt-2">
-                        <AccountList
-                          accounts={integration.accounts}
-                          onDelete={handleDelete}
-                          onToggle={handleToggle}
-                          onSync={handleSync}
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
+                    integration={integration}
+                    onAccountAdded={refetch}
+                    onDelete={handleDelete}
+                    onToggle={handleToggle}
+                    onSync={handleSync}
+                  />
                 ))}
               </div>
             </div>

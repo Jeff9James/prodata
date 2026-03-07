@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { accounts } from "@/lib/db/schema";
 import { decrypt } from "@/lib/crypto";
+import { eq } from "drizzle-orm";
 import { getOAuthConfig } from "@/lib/integrations/amazon/auth";
 import { AmazonSPAPIClient } from "@/lib/integrations/amazon/client";
 
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
   const account = db
     .select()
     .from(accounts)
-    .where({ id: accountId })
+    .where(eq(accounts.id, accountId))
     .get();
 
   if (!account) {

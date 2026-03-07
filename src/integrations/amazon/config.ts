@@ -11,6 +11,20 @@ export const AMAZON_DESCRIPTION =
 export const AMAZON_ICON = "ShoppingCart";
 export const AMAZON_COLOR = "#FF9900";
 
+/**
+ * Whether OAuth flow is configured for this integration.
+ * Set via environment variables: AMAZON_LWA_CLIENT_ID, AMAZON_LWA_CLIENT_SECRET,
+ * AMAZON_APPLICATION_ID, AMAZON_REDIRECT_URI
+ */
+export function isAmazonOAuthConfigured(): boolean {
+  return !!(
+    process.env.AMAZON_LWA_CLIENT_ID &&
+    process.env.AMAZON_LWA_CLIENT_SECRET &&
+    process.env.AMAZON_APPLICATION_ID &&
+    process.env.AMAZON_REDIRECT_URI
+  );
+}
+
 export const amazonCredentials: CredentialField[] = [
   {
     key: "refresh_token",
