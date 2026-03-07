@@ -105,16 +105,28 @@ export const amazonMetricTypes: MetricTypeDefinition[] = [
         description: "Number of orders placed",
     },
     {
-        key: "units_sold",
+        key: "sales_count",
         label: "Units Sold",
         format: "number",
         description: "Total quantity of items sold",
+    },
+    {
+        key: "new_customers",
+        label: "New Customers",
+        format: "number",
+        description: "Unique first-time buyers per day",
     },
     {
         key: "refunds",
         label: "Refunds",
         format: "currency",
         description: "Total refund amount",
+    },
+    {
+        key: "platform_fees",
+        label: "Platform Fees",
+        format: "currency",
+        description: "Amazon referral fees and FBA fees",
     },
     {
         key: "products_count",

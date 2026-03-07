@@ -113,6 +113,24 @@ export const METRIC_KEYS = {
     format: "number" as const,
     description: "Number of published products",
   },
+  orders_count: {
+    key: "orders_count",
+    label: "Orders",
+    format: "number" as const,
+    description: "Number of orders placed",
+  },
+  platform_fees: {
+    key: "platform_fees",
+    label: "Platform Fees",
+    format: "currency" as const,
+    description: "Platform processing and referral fees",
+  },
+  units_sold: {
+    key: "units_sold",
+    label: "Units Sold",
+    format: "number" as const,
+    description: "Total quantity of items sold",
+  },
 } as const;
 
 /** Type-safe metric key string */
