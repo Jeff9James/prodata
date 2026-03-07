@@ -113,12 +113,6 @@ export const METRIC_KEYS = {
     format: "number" as const,
     description: "Number of published products",
   },
-  orders_count: {
-    key: "orders_count",
-    label: "Orders",
-    format: "number" as const,
-    description: "Number of orders placed",
-  },
 } as const;
 
 /** Type-safe metric key string */
