@@ -11,6 +11,8 @@ OhMyDashboard is open source and runs locally. Your data stays on your machine.
 ![OhMyDashboard preview](docs/screenshots/dashboard.jpg)
 ![Sync log preview](docs/screenshots/sync.jpg)
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Unselfisheologism/prodata)
+
 ## Why this exists
 
 If you are an indie builder, you are constantly switching tabs:
