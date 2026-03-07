@@ -69,6 +69,7 @@ export async function loadAllIntegrations(): Promise<void> {
   await import("./stripe");
   await import("./gumroad");
   await import("./revenuecat");
+  await import("./amazon");
 }
 
 /**
