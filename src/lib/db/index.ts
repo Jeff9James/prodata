@@ -1,222 +1,50 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import * as schema from "./schema";
-import path from "path";
-import fs from "fs";
 
-const DB_DIR = path.join(process.cwd(), ".ohmydashboard");
-const DB_PATH = path.join(DB_DIR, "data.db");
-
-function ensureDbDirectory() {
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-  }
-}
-
-function createConnection(dbPath?: string) {
-  const resolvedPath = dbPath ?? DB_PATH;
-
-  // For non-memory databases, ensure directory exists
-  if (resolvedPath !== ":memory:") {
-    const dir = path.dirname(resolvedPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-  }
-
-  const sqlite = new Database(resolvedPath);
-
-  // Enable WAL mode for better concurrent read performance
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("foreign_keys = ON");
-
-  return sqlite;
-}
+const DATABASE_URL = process.env.DATABASE_URL ||
+  "postgresql://postgres:password@localhost:5432/postgres";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-let _sqlite: Database.Database | null = null;
+let _sql: postgres.Sql<{}> | null = null;
 
 /**
  * Get the singleton database instance.
- * Creates the database and runs migrations on first call.
  */
-export function getDb(dbPath?: string) {
+export function getDb() {
   if (!_db) {
-    if (!dbPath) {
-      ensureDbDirectory();
-    }
-    _sqlite = createConnection(dbPath);
-    _db = drizzle(_sqlite, { schema });
-    initializeDatabase(_sqlite);
+    _sql = postgres(DATABASE_URL);
+    _db = drizzle(_sql, { schema });
   }
   return _db;
 }
 
 /**
- * Create a fresh database instance (useful for testing).
+ * Get the raw SQL client for direct queries if needed.
  */
-export function createTestDb() {
-  const sqlite = createConnection(":memory:");
-  const db = drizzle(sqlite, { schema });
-  initializeDatabase(sqlite);
-  return { db, sqlite };
+export function getSql() {
+  if (!_sql) {
+    _sql = postgres(DATABASE_URL);
+  }
+  return _sql;
 }
 
 /**
  * Close the database connection.
  */
-export function closeDb() {
-  if (_sqlite) {
-    _sqlite.close();
-    _sqlite = null;
+export async function closeDb() {
+  if (_sql) {
+    await _sql.end();
+    _sql = null;
     _db = null;
   }
 }
 
 /**
- * Initialize the database schema.
- * Creates all tables if they don't exist.
+ * Create a test database instance (useful for testing).
  */
-function initializeDatabase(sqlite: Database.Database) {
-  sqlite.exec(`
-    CREATE TABLE IF NOT EXISTS accounts (
-      id TEXT PRIMARY KEY,
-      integration_id TEXT NOT NULL,
-      label TEXT NOT NULL,
-      credentials TEXT NOT NULL,
-      is_active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY,
-      account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-      label TEXT NOT NULL,
-      filters TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS sync_logs (
-      id TEXT PRIMARY KEY,
-      account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-      status TEXT NOT NULL CHECK(status IN ('success', 'error', 'running')),
-      started_at TEXT NOT NULL,
-      completed_at TEXT,
-      error TEXT,
-      records_processed INTEGER DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS metrics (
-      id TEXT PRIMARY KEY,
-      account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
-      metric_type TEXT NOT NULL,
-      value REAL NOT NULL,
-      currency TEXT,
-      date TEXT NOT NULL,
-      metadata TEXT DEFAULT '{}',
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS widget_configs (
-      id TEXT PRIMARY KEY,
-      widget_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      config TEXT NOT NULL DEFAULT '{}',
-      position INTEGER NOT NULL DEFAULT 0,
-      size TEXT NOT NULL DEFAULT 'md' CHECK(size IN ('sm', 'md', 'lg', 'xl')),
-      is_visible INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_metrics_account_id ON metrics(account_id);
-    CREATE INDEX IF NOT EXISTS idx_metrics_date ON metrics(date);
-    CREATE INDEX IF NOT EXISTS idx_metrics_type ON metrics(metric_type);
-    CREATE INDEX IF NOT EXISTS idx_metrics_account_date ON metrics(account_id, date);
-    CREATE INDEX IF NOT EXISTS idx_metrics_dedup ON metrics(account_id, metric_type, date, project_id, metadata);
-    CREATE INDEX IF NOT EXISTS idx_metrics_project_id ON metrics(project_id);
-    CREATE INDEX IF NOT EXISTS idx_sync_logs_account ON sync_logs(account_id);
-    CREATE INDEX IF NOT EXISTS idx_sync_logs_account_status ON sync_logs(account_id, status, started_at);
-    CREATE INDEX IF NOT EXISTS idx_projects_account ON projects(account_id);
-
-    CREATE TABLE IF NOT EXISTS project_groups (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS project_group_members (
-      id TEXT PRIMARY KEY,
-      group_id TEXT NOT NULL REFERENCES project_groups(id) ON DELETE CASCADE,
-      account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-      project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_pgm_group ON project_group_members(group_id);
-    CREATE INDEX IF NOT EXISTS idx_pgm_account ON project_group_members(account_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_pgm_dedup ON project_group_members(group_id, account_id, project_id);
-
-    CREATE TABLE IF NOT EXISTS sales (
-      id TEXT PRIMARY KEY,
-      account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
-      platform TEXT NOT NULL,
-      product_name TEXT NOT NULL,
-      product_id TEXT,
-      amount REAL NOT NULL,
-      currency TEXT NOT NULL DEFAULT 'USD',
-      country TEXT,
-      country_name TEXT,
-      timestamp TEXT NOT NULL,
-      metadata TEXT DEFAULT '{}',
-      created_at TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_sales_account_id ON sales(account_id);
-    CREATE INDEX IF NOT EXISTS idx_sales_timestamp ON sales(timestamp);
-    CREATE INDEX IF NOT EXISTS idx_sales_platform ON sales(platform);
-
-    -- Product COGS table for profit calculations
-    CREATE TABLE IF NOT EXISTS product_cogs (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      platform TEXT NOT NULL,
-      product_name TEXT NOT NULL,
-      cogs_amount REAL NOT NULL DEFAULT 0,
-      estimated_fee_percent REAL NOT NULL DEFAULT 0,
-      currency TEXT NOT NULL DEFAULT 'USD',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_product_cogs_platform ON product_cogs(platform);
-    CREATE INDEX IF NOT EXISTS idx_product_cogs_product_id ON product_cogs(product_id);
-
-    -- Custom Goals table for revenue targets and alerts
-    CREATE TABLE IF NOT EXISTS goals (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      target_value REAL NOT NULL,
-      current_value REAL NOT NULL DEFAULT 0,
-      metric_type TEXT NOT NULL,
-      period TEXT NOT NULL DEFAULT 'monthly' CHECK(period IN ('daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'custom')),
-      start_date TEXT NOT NULL,
-      end_date TEXT NOT NULL,
-      alert_threshold REAL NOT NULL DEFAULT 80,
-      alert_enabled INTEGER NOT NULL DEFAULT 1,
-      is_active INTEGER NOT NULL DEFAULT 1,
-      notify_on_achieve INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_goals_metric_type ON goals(metric_type);
-    CREATE INDEX IF NOT EXISTS idx_goals_is_active ON goals(is_active);
-    CREATE INDEX IF NOT EXISTS idx_goals_period ON goals(period);
-  `);
+export function createTestDb() {
+  const sql = postgres("postgresql://postgres:password@localhost:5432/postgres");
+  const db = drizzle(sql, { schema });
+  return { db, sql };
 }

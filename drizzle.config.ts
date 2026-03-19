@@ -3,8 +3,8 @@ import { defineConfig } from "drizzle-kit";
 export default defineConfig({
   schema: "./src/lib/db/schema.ts",
   out: "./src/lib/db/migrations",
-  dialect: "sqlite",
+  dialect: "postgresql",
   dbCredentials: {
-    url: ".ohmydashboard/data.db",
+    url: process.env.DATABASE_URL || "postgresql://postgres:password@localhost:5432/postgres",
   },
 });

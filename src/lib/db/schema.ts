@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer, real, uuid, timestamp, boolean, jsonb, check } from "drizzle-orm/pg-core";
 
 // ─── Core Tables ────────────────────────────────────────────────────────────
 
@@ -6,42 +6,45 @@ import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
  * Accounts represent a single connection to an external service.
  * A user can have multiple accounts for the same integration (e.g., 3 Stripe accounts).
  */
-export const accounts = sqliteTable("accounts", {
-  id: text("id").primaryKey(), // UUID
+export const accounts = pgTable("accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(), // References auth.users
   integrationId: text("integration_id").notNull(), // e.g. "stripe"
   label: text("label").notNull(), // User-chosen name, e.g. "My SaaS Stripe"
   credentials: text("credentials").notNull(), // JSON string of encrypted credentials
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: text("created_at").notNull(), // ISO string
-  updatedAt: text("updated_at").notNull(), // ISO string
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 /**
  * Projects represent a subset/filter within an account.
  * e.g., a specific product within a Stripe account.
  */
-export const projects = sqliteTable("projects", {
-  id: text("id").primaryKey(), // UUID
-  accountId: text("account_id")
+export const projects = pgTable("projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  accountId: uuid("account_id")
     .notNull()
     .references(() => accounts.id, { onDelete: "cascade" }),
   label: text("label").notNull(),
-  filters: text("filters").notNull().default("{}"), // JSON string of integration-specific filters
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  filters: jsonb("filters").notNull().default({}), // JSON object of integration-specific filters
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 /**
  * Sync logs track when each account was last synced and the result.
  */
-export const syncLogs = sqliteTable("sync_logs", {
-  id: text("id").primaryKey(), // UUID
-  accountId: text("account_id")
+export const syncLogs = pgTable("sync_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  accountId: uuid("account_id")
     .notNull()
     .references(() => accounts.id, { onDelete: "cascade" }),
   status: text("status", { enum: ["success", "error", "running"] }).notNull(),
-  startedAt: text("started_at").notNull(),
-  completedAt: text("completed_at"),
+  startedAt: timestamp("started_at").notNull(),
+  completedAt: timestamp("completed_at"),
   error: text("error"),
   recordsProcessed: integer("records_processed").default(0),
 });
@@ -50,48 +53,51 @@ export const syncLogs = sqliteTable("sync_logs", {
  * Universal metrics table — all integrations write normalized data here.
  * This enables cross-integration queries (e.g., total revenue across all services).
  */
-export const metrics = sqliteTable("metrics", {
-  id: text("id").primaryKey(), // UUID
-  accountId: text("account_id")
+export const metrics = pgTable("metrics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  accountId: uuid("account_id")
     .notNull()
     .references(() => accounts.id, { onDelete: "cascade" }),
-  projectId: text("project_id").references(() => projects.id, {
+  projectId: uuid("project_id").references(() => projects.id, {
     onDelete: "set null",
   }),
   metricType: text("metric_type").notNull(), // e.g. "revenue", "subscriber_count", "downloads"
   value: real("value").notNull(),
   currency: text("currency"), // e.g. "USD", null for non-monetary metrics
   date: text("date").notNull(), // ISO date string (YYYY-MM-DD)
-  metadata: text("metadata").default("{}"), // JSON string for extra context
-  createdAt: text("created_at").notNull(),
+  metadata: jsonb("metadata").default({}), // JSON object for extra context
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 /**
  * Widget configurations — what widgets the user has on their dashboard.
  */
-export const widgetConfigs = sqliteTable("widget_configs", {
-  id: text("id").primaryKey(), // UUID
+export const widgetConfigs = pgTable("widget_configs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
   widgetType: text("widget_type").notNull(), // e.g. "metric_card", "revenue_chart", "data_table"
   title: text("title").notNull(),
-  config: text("config").notNull().default("{}"), // JSON string with widget-specific settings
+  config: jsonb("config").notNull().default({}), // JSON object with widget-specific settings
   position: integer("position").notNull().default(0), // Order in the grid
   size: text("size", { enum: ["sm", "md", "lg", "xl"] })
     .notNull()
     .default("md"),
-  isVisible: integer("is_visible", { mode: "boolean" }).notNull().default(true),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  isVisible: boolean("is_visible").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 /**
  * Project groups let users merge data from multiple accounts/products
  * into a single logical project (e.g. "CSS Pro" across Gumroad + Stripe).
  */
-export const projectGroups = sqliteTable("project_groups", {
-  id: text("id").primaryKey(), // UUID
+export const projectGroups = pgTable("project_groups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
   name: text("name").notNull(), // User-chosen name, e.g. "CSS Pro"
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 /**
@@ -101,18 +107,19 @@ export const projectGroups = sqliteTable("project_groups", {
  * If projectId is NULL, the entire account is included.
  * If projectId is set, only that product's metrics are included.
  */
-export const projectGroupMembers = sqliteTable("project_group_members", {
-  id: text("id").primaryKey(), // UUID
-  groupId: text("group_id")
+export const projectGroupMembers = pgTable("project_group_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  groupId: uuid("group_id")
     .notNull()
     .references(() => projectGroups.id, { onDelete: "cascade" }),
-  accountId: text("account_id")
+  accountId: uuid("account_id")
     .notNull()
     .references(() => accounts.id, { onDelete: "cascade" }),
-  projectId: text("project_id").references(() => projects.id, {
+  projectId: uuid("project_id").references(() => projects.id, {
     onDelete: "cascade",
   }),
-  createdAt: text("created_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ─── Type Exports ───────────────────────────────────────────────────────────
@@ -127,16 +134,18 @@ export type Metric = typeof metrics.$inferSelect;
 export type NewMetric = typeof metrics.$inferInsert;
 export type WidgetConfig = typeof widgetConfigs.$inferSelect;
 export type NewWidgetConfig = typeof widgetConfigs.$inferInsert;
+
 /**
  * Individual sales/orders table — stores detailed information about each sale
  * for live feed and world map visualization.
  */
-export const sales = sqliteTable("sales", {
-  id: text("id").primaryKey(), // UUID
-  accountId: text("account_id")
+export const sales = pgTable("sales", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  accountId: uuid("account_id")
     .notNull()
     .references(() => accounts.id, { onDelete: "cascade" }),
-  projectId: text("project_id").references(() => projects.id, {
+  projectId: uuid("project_id").references(() => projects.id, {
     onDelete: "set null",
   }),
   platform: text("platform").notNull(), // "amazon", "gumroad", "stripe", "revenuecat"
@@ -146,9 +155,9 @@ export const sales = sqliteTable("sales", {
   currency: text("currency").notNull().default("USD"),
   country: text("country"), // ISO 3166-1 alpha-2 country code
   countryName: text("country_name"), // Full country name
-  timestamp: text("timestamp").notNull(), // ISO datetime string (YYYY-MM-DDTHH:mm:ssZ)
-  metadata: text("metadata").default("{}"), // JSON string for extra context (e.g. order ID, customer email)
-  createdAt: text("created_at").notNull(),
+  timestamp: timestamp("timestamp").notNull(), // ISO datetime string
+  metadata: jsonb("metadata").default({}), // JSON object for extra context (e.g. order ID, customer email)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ─── Type Exports ───────────────────────────────────────────────────────────
@@ -163,16 +172,17 @@ export type NewSale = typeof sales.$inferInsert;
  * Product COGS (Cost of Goods Sold) - user-editable costs/fees per product
  * Allows calculating net profit after platform fees and COGS
  */
-export const productCogs = sqliteTable("product_cogs", {
-  id: text("id").primaryKey(), // UUID
+export const productCogs = pgTable("product_cogs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
   productId: text("product_id").notNull(), // Platform-specific product ID (e.g., Stripe price_id, Gumroad product_id)
   platform: text("platform").notNull(), // "amazon", "gumroad", "stripe", "revenuecat"
   productName: text("product_name").notNull(), // Product display name
   cogsAmount: real("cogs_amount").notNull().default(0), // Cost per unit in product currency
   estimatedFeePercent: real("estimated_fee_percent").notNull().default(0), // Estimated platform fee % (e.g., 5 for 5%)
   currency: text("currency").notNull().default("USD"), // Currency for COGS
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export type ProductCog = typeof productCogs.$inferSelect;
@@ -181,8 +191,9 @@ export type NewProductCog = typeof productCogs.$inferInsert;
 /**
  * Custom Goals - revenue targets and alert thresholds
  */
-export const goals = sqliteTable("goals", {
-  id: text("id").primaryKey(), // UUID
+export const goals = pgTable("goals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
   name: text("name").notNull(), // Goal name, e.g. "Monthly Revenue Target"
   targetValue: real("target_value").notNull(), // Target amount
   currentValue: real("current_value").notNull().default(0), // Current progress
@@ -191,11 +202,11 @@ export const goals = sqliteTable("goals", {
   startDate: text("start_date").notNull(), // ISO date string
   endDate: text("end_date").notNull(), // ISO date string
   alertThreshold: real("alert_threshold").notNull().default(80), // Alert when % of target reached (default 80%)
-  alertEnabled: integer("alert_enabled", { mode: "boolean" }).notNull().default(true),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  notifyOnAchieve: integer("notify_on_achieve", { mode: "boolean" }).notNull().default(true),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  alertEnabled: boolean("alert_enabled").notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
+  notifyOnAchieve: boolean("notify_on_achieve").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export type Goal = typeof goals.$inferSelect;
