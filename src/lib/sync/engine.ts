@@ -1,5 +1,5 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { accounts, metrics, projects, syncLogs } from "../db/schema";
+import { accounts, metrics, projects, syncLogs, sales } from "../db/schema";
 import type * as schema from "../db/schema";
 import { eq, and, isNull, desc, ne } from "drizzle-orm";
 import { getIntegration } from "../../integrations/registry";
@@ -242,6 +242,22 @@ export async function syncAccount(
         });
       }
 
+      // Store sales records
+      if (result.sales && result.sales.length > 0) {
+        appendSyncStep(accountId, {
+          key: "store_sales",
+          label: "Store sales records",
+          status: "running",
+          recordCount: result.sales.length,
+        });
+        const storeSalesT0 = Date.now();
+        storeSales(database, result.sales);
+        updateSyncStep(accountId, "store_sales", {
+          status: "success",
+          durationMs: Date.now() - storeSalesT0,
+        });
+      }
+
       // Mark sync as successful
       const completedAt = new Date().toISOString();
 
@@ -451,6 +467,41 @@ function storeMetricsBatch(
             metadata: metadataJson,
             createdAt: now,
           })
+          .run();
+      }
+    }
+  });
+}
+
+function storeSales(db: Db, salesRecords: any[]): void {
+  db.transaction((tx) => {
+    for (const sale of salesRecords) {
+      // Check if sale already exists
+      const existing = tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.id, sale.id))
+        .get();
+
+      if (existing) {
+        // Update existing sale
+        tx.update(sales)
+          .set({
+            productName: sale.productName,
+            productId: sale.productId,
+            amount: sale.amount,
+            currency: sale.currency,
+            country: sale.country,
+            countryName: sale.countryName,
+            timestamp: sale.timestamp,
+            metadata: sale.metadata,
+          })
+          .where(eq(sales.id, sale.id))
+          .run();
+      } else {
+        // Insert new sale
+        tx.insert(sales)
+          .values(sale)
           .run();
       }
     }

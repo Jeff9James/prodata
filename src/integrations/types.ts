@@ -106,6 +106,8 @@ export interface SyncResult {
   recordsProcessed: number;
   /** Normalized metrics to write to the universal metrics table */
   metrics: NormalizedMetric[];
+  /** Individual sales records to write to the sales table */
+  sales?: any[]; // Using any[] here to avoid circular dependencies
   /** Error message if sync failed */
   error?: string;
   /** Discrete steps performed during this sync, for transparency UI */

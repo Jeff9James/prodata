@@ -27,6 +27,7 @@ import type {
 } from "../types";
 import { DEFAULT_AMAZON_REGION, type AmazonRegion } from "./config";
 import { getAccessToken, getSpApiEndpoint, validateAmazonCredentials, type AmazonCredentials } from "./auth";
+import type { NewSale } from "../../lib/db/schema";
 
 // ─── Amazon API Types ───────────────────────────────────────────────────────
 
@@ -440,6 +441,64 @@ async function fetchCatalogCount(
  * Compute normalized metrics from Amazon orders and financial data
  * Follows Gumroad's pattern: per-day metrics with optional project (product) breakdown
  */
+function computeSalesRecords(
+    orders: AmazonOrder[],
+    currency: string
+): NewSale[] {
+    const records: NewSale[] = [];
+
+    for (const order of orders) {
+        // Skip canceled orders
+        if (order.OrderStatus === "Canceled" || order.OrderStatus === "Pending") {
+            continue;
+        }
+
+        // Calculate order value from OrderItems if available, otherwise use Amount
+        let orderValue = order.Amount || 0;
+        if (order.OrderItems && order.OrderItems.length > 0) {
+            orderValue = 0;
+            for (const item of order.OrderItems) {
+                const itemPrice = parseFloat(item.ItemPrice?.Amount || "0");
+                const itemTax = parseFloat(item.ItemTax?.Amount || "0");
+                orderValue += itemPrice + itemTax;
+            }
+        }
+
+        // Extract product information from order items
+        let productName = "Amazon Product";
+        let productId = "amazon-generic";
+        if (order.OrderItems && order.OrderItems.length > 0) {
+            productName = order.OrderItems[0].Title || "Amazon Product";
+            productId = order.OrderItems[0].ASIN || "amazon-generic";
+        }
+
+        records.push({
+            id: `amazon-${order.AmazonOrderId}`,
+            accountId: "", // Will be set by sync engine
+            projectId: productId, // Using ASIN as product ID
+            platform: "amazon",
+            productName,
+            productId,
+            amount: orderValue,
+            currency: currency,
+            country: "US", // Amazon SP-API doesn't provide country directly, defaulting to US
+            countryName: "United States",
+            timestamp: order.PurchaseDate,
+            metadata: JSON.stringify({
+                orderId: order.AmazonOrderId,
+                buyerEmail: order.BuyerEmail,
+                buyerName: order.BuyerName,
+                numberOfItems: order.NumberOfItemsShipped + order.NumberOfItemsUnshipped,
+                isPrime: order.IsPrime,
+                fulfillmentChannel: order.FulfillmentChannel,
+            }),
+            createdAt: new Date().toISOString(),
+        });
+    }
+
+    return records;
+}
+
 function computeMetrics(
     orders: AmazonOrder[],
     financialGroups: FinancialEventGroup[],
@@ -727,6 +786,13 @@ export async function amazonSync(
 
         // Compute normalized metrics following Gumroad's pattern
         const metrics = computeMetrics(orders, financialGroups, productsCount, currency);
+        const salesRecords = computeSalesRecords(orders, currency);
+
+        // Set accountId on sales records
+        const salesRecordsWithAccountId = salesRecords.map((sale) => ({
+            ...sale,
+            accountId: account.id,
+        }));
 
         const metricsStepDuration = Date.now();
         reportStep?.({
@@ -741,6 +807,7 @@ export async function amazonSync(
             success: true,
             recordsProcessed: orders.length + financialGroups.length,
             metrics,
+            sales: salesRecordsWithAccountId,
             steps,
         };
 

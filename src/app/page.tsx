@@ -3,6 +3,8 @@
 import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { MetricCard, type RankingEntry } from "@/components/dashboard/metric-card";
 import { CustomersByCountryChart } from "@/components/dashboard/customers-by-country-chart";
+import { LiveFeed } from "@/components/dashboard/live-feed";
+import { WorldMap } from "@/components/dashboard/world-map";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { DashboardFilter } from "@/components/dashboard/dashboard-filter";
 import { DateRangeFilter } from "@/components/dashboard/date-range-filter";
@@ -236,44 +238,44 @@ export default function Dashboard() {
     },
     ...((hasRevenueBreakdown || metricsLoading)
       ? [
-          {
-            title: `Subscription Revenue (${rangeSuffix()})`,
-            current: currentTotals.subscriptionRevenue,
-            previous: previousTotals.subscriptionRevenue,
-            format: "currency" as const,
-            icon: <Repeat className="h-4 w-4" />,
-            metricKey: "subscription_revenue",
-          },
-          {
-            title: `One-Time Revenue (${rangeSuffix()})`,
-            current: currentTotals.oneTimeRevenue,
-            previous: previousTotals.oneTimeRevenue,
-            format: "currency" as const,
-            icon: <ShoppingBag className="h-4 w-4" />,
-            metricKey: "one_time_revenue",
-          },
-          {
-            title: `Total Sales (${rangeSuffix()})`,
-            current: currentTotals.salesCount,
-            previous: previousTotals.salesCount,
-            format: "number" as const,
-            icon: <Package className="h-4 w-4" />,
-            metricKey: "sales_count",
-          },
-        ]
+        {
+          title: `Subscription Revenue (${rangeSuffix()})`,
+          current: currentTotals.subscriptionRevenue,
+          previous: previousTotals.subscriptionRevenue,
+          format: "currency" as const,
+          icon: <Repeat className="h-4 w-4" />,
+          metricKey: "subscription_revenue",
+        },
+        {
+          title: `One-Time Revenue (${rangeSuffix()})`,
+          current: currentTotals.oneTimeRevenue,
+          previous: previousTotals.oneTimeRevenue,
+          format: "currency" as const,
+          icon: <ShoppingBag className="h-4 w-4" />,
+          metricKey: "one_time_revenue",
+        },
+        {
+          title: `Total Sales (${rangeSuffix()})`,
+          current: currentTotals.salesCount,
+          previous: previousTotals.salesCount,
+          format: "number" as const,
+          icon: <Package className="h-4 w-4" />,
+          metricKey: "sales_count",
+        },
+      ]
       : []),
     ...((hasPlatformFees || metricsLoading)
       ? [
-          {
-            title: `Platform Fees (${rangeSuffix()})`,
-            current: currentTotals.platformFees,
-            previous: previousTotals.platformFees,
-            format: "currency" as const,
-            icon: <Landmark className="h-4 w-4" />,
-            metricKey: "platform_fees",
-            changeDirection: "down" as const,
-          },
-        ]
+        {
+          title: `Platform Fees (${rangeSuffix()})`,
+          current: currentTotals.platformFees,
+          previous: previousTotals.platformFees,
+          format: "currency" as const,
+          icon: <Landmark className="h-4 w-4" />,
+          metricKey: "platform_fees",
+          changeDirection: "down" as const,
+        },
+      ]
       : []),
   ];
 
@@ -500,6 +502,12 @@ export default function Dashboard() {
                 />
               );
             })}
+          </div>
+
+          {/* Live Feed and World Map */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <LiveFeed limit={8} />
+            <WorldMap />
           </div>
 
           {/* Customers by Country */}

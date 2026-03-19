@@ -160,5 +160,25 @@ function initializeDatabase(sqlite: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_pgm_group ON project_group_members(group_id);
     CREATE INDEX IF NOT EXISTS idx_pgm_account ON project_group_members(account_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_pgm_dedup ON project_group_members(group_id, account_id, project_id);
+
+    CREATE TABLE IF NOT EXISTS sales (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+      platform TEXT NOT NULL,
+      product_name TEXT NOT NULL,
+      product_id TEXT,
+      amount REAL NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      country TEXT,
+      country_name TEXT,
+      timestamp TEXT NOT NULL,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sales_account_id ON sales(account_id);
+    CREATE INDEX IF NOT EXISTS idx_sales_timestamp ON sales(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_sales_platform ON sales(platform);
   `);
 }

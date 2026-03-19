@@ -6,6 +6,7 @@ import type {
   SyncResult,
   SyncStep,
 } from "../types";
+import type { NewSale } from "../../lib/db/schema";
 
 // ─── Gumroad API types ──────────────────────────────────────────────────────
 
@@ -545,6 +546,48 @@ function computeProductsCount(
 }
 
 /**
+ * Convert Gumroad sales to individual sale records for the sales table.
+ */
+function computeSalesRecords(
+  sales: GumroadSale[],
+  productLookup: Map<string, GumroadProduct>
+): NewSale[] {
+  const records: NewSale[] = [];
+
+  for (const sale of sales) {
+    if (sale.refunded || sale.chargedback) continue;
+
+    const product = productLookup.get(sale.product_id);
+    const isSubscription = product?.is_tiered_membership ??
+      (sale.subscription_duration != null && sale.subscription_duration !== "");
+
+    records.push({
+      id: `gumroad-${sale.id}`,
+      accountId: "", // Will be set by sync engine
+      projectId: sale.product_id,
+      platform: "gumroad",
+      productName: product?.name ?? sale.product_name,
+      productId: sale.product_id,
+      amount: sale.price / 100, // Convert cents to dollars
+      currency: "USD",
+      country: sale.country_iso2?.toUpperCase(),
+      countryName: sale.country,
+      timestamp: sale.created_at,
+      metadata: JSON.stringify({
+        orderId: sale.id,
+        email: sale.email,
+        isSubscription,
+        recurring: !!sale.recurring_charge,
+        quantity: sale.quantity,
+      }),
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  return records;
+}
+
+/**
  * Normalize a Gumroad subscription duration to a monthly multiplier.
  * E.g. "yearly" → 1/12, "quarterly" → 1/3, "monthly" → 1.
  */
@@ -828,6 +871,7 @@ export const gumroadFetcher: DataFetcher = {
 
     // Step 2: Fetch sales (uses product lookup to classify subscription vs one-time)
     const productsWithSales = new Set<string>();
+    let salesRecords: NewSale[] = [];
     t0 = Date.now();
     reportStep?.({ key: "fetch_sales", label: "Fetch sales & revenue", status: "running" });
     try {
@@ -840,6 +884,7 @@ export const gumroadFetcher: DataFetcher = {
       }
       const salesMetrics = computeSalesMetrics(sales, productLookup);
       allMetrics.push(...salesMetrics);
+      salesRecords = computeSalesRecords(sales, productLookup);
       totalRecords += sales.length;
       const step: SyncStep = {
         key: "fetch_sales",
@@ -943,10 +988,17 @@ export const gumroadFetcher: DataFetcher = {
       };
     }
 
+    // Set accountId on sales records
+    const salesRecordsWithAccountId = salesRecords.map((sale) => ({
+      ...sale,
+      accountId: account.id,
+    }));
+
     return {
       success: true,
       recordsProcessed: totalRecords,
       metrics: allMetrics,
+      sales: salesRecordsWithAccountId,
       steps,
       error: hasAnyError ? "Some sync steps failed" : undefined,
     };

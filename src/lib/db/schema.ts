@@ -127,7 +127,34 @@ export type Metric = typeof metrics.$inferSelect;
 export type NewMetric = typeof metrics.$inferInsert;
 export type WidgetConfig = typeof widgetConfigs.$inferSelect;
 export type NewWidgetConfig = typeof widgetConfigs.$inferInsert;
+/**
+ * Individual sales/orders table — stores detailed information about each sale
+ * for live feed and world map visualization.
+ */
+export const sales = sqliteTable("sales", {
+  id: text("id").primaryKey(), // UUID
+  accountId: text("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  projectId: text("project_id").references(() => projects.id, {
+    onDelete: "set null",
+  }),
+  platform: text("platform").notNull(), // "amazon", "gumroad", "stripe", "revenuecat"
+  productName: text("product_name").notNull(),
+  productId: text("product_id"), // Platform-specific product ID
+  amount: real("amount").notNull(),
+  currency: text("currency").notNull().default("USD"),
+  country: text("country"), // ISO 3166-1 alpha-2 country code
+  countryName: text("country_name"), // Full country name
+  timestamp: text("timestamp").notNull(), // ISO datetime string (YYYY-MM-DDTHH:mm:ssZ)
+  metadata: text("metadata").default("{}"), // JSON string for extra context (e.g. order ID, customer email)
+  createdAt: text("created_at").notNull(),
+});
+
+// ─── Type Exports ───────────────────────────────────────────────────────────
 export type ProjectGroup = typeof projectGroups.$inferSelect;
 export type NewProjectGroup = typeof projectGroups.$inferInsert;
 export type ProjectGroupMember = typeof projectGroupMembers.$inferSelect;
 export type NewProjectGroupMember = typeof projectGroupMembers.$inferInsert;
+export type Sale = typeof sales.$inferSelect;
+export type NewSale = typeof sales.$inferInsert;

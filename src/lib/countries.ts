@@ -127,3 +127,50 @@ export function isValidCountryCode(code: string): boolean {
   const upper = code.toUpperCase();
   return countries.isValid(upper) || upper === "XK";
 }
+
+/**
+ * Get approximate latitude/longitude coordinates for a country from its ISO 3166-1 alpha-2 code.
+ * Used for plotting sales on the world map.
+ */
+export function getCountryCoordinates(code: string): { lat: number; lng: number } | null {
+  const coordinates: Record<string, { lat: number; lng: number }> = {
+    // North America
+    US: { lat: 37.0902, lng: -95.7129 }, // United States
+    CA: { lat: 56.1304, lng: -106.3468 }, // Canada
+    MX: { lat: 23.6345, lng: -102.5528 }, // Mexico
+
+    // South America
+    BR: { lat: -14.2350, lng: -51.9253 }, // Brazil
+    AR: { lat: -38.4161, lng: -63.6167 }, // Argentina
+    CO: { lat: 4.5709, lng: -74.2973 }, // Colombia
+
+    // Europe
+    GB: { lat: 55.3781, lng: -3.4360 }, // United Kingdom
+    FR: { lat: 46.2276, lng: 2.2137 }, // France
+    DE: { lat: 51.1657, lng: 10.4515 }, // Germany
+    IT: { lat: 41.8719, lng: 12.5674 }, // Italy
+    ES: { lat: 40.4637, lng: -3.7492 }, // Spain
+    RU: { lat: 61.5240, lng: 105.3188 }, // Russia
+    NL: { lat: 52.1326, lng: 5.2913 }, // Netherlands
+    BE: { lat: 50.5039, lng: 4.4699 }, // Belgium
+    CH: { lat: 46.8182, lng: 8.2275 }, // Switzerland
+
+    // Asia
+    IN: { lat: 20.5937, lng: 78.9629 }, // India
+    CN: { lat: 35.8617, lng: 104.1954 }, // China
+    JP: { lat: 36.2048, lng: 138.2529 }, // Japan
+    KR: { lat: 35.9078, lng: 127.7669 }, // South Korea
+    SG: { lat: 1.3521, lng: 103.8198 }, // Singapore
+    AU: { lat: -25.2744, lng: 133.7751 }, // Australia
+
+    // Africa
+    NG: { lat: 9.0820, lng: 8.6753 }, // Nigeria
+    SA: { lat: -30.5595, lng: 22.9375 }, // South Africa
+    KE: { lat: -0.0236, lng: 37.9062 }, // Kenya
+
+    // Default coordinates (center of map)
+    Unknown: { lat: 0, lng: 0 },
+  };
+
+  return coordinates[code.toUpperCase()] || coordinates["Unknown"];
+}
