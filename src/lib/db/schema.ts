@@ -158,3 +158,45 @@ export type ProjectGroupMember = typeof projectGroupMembers.$inferSelect;
 export type NewProjectGroupMember = typeof projectGroupMembers.$inferInsert;
 export type Sale = typeof sales.$inferSelect;
 export type NewSale = typeof sales.$inferInsert;
+
+/**
+ * Product COGS (Cost of Goods Sold) - user-editable costs/fees per product
+ * Allows calculating net profit after platform fees and COGS
+ */
+export const productCogs = sqliteTable("product_cogs", {
+  id: text("id").primaryKey(), // UUID
+  productId: text("product_id").notNull(), // Platform-specific product ID (e.g., Stripe price_id, Gumroad product_id)
+  platform: text("platform").notNull(), // "amazon", "gumroad", "stripe", "revenuecat"
+  productName: text("product_name").notNull(), // Product display name
+  cogsAmount: real("cogs_amount").notNull().default(0), // Cost per unit in product currency
+  estimatedFeePercent: real("estimated_fee_percent").notNull().default(0), // Estimated platform fee % (e.g., 5 for 5%)
+  currency: text("currency").notNull().default("USD"), // Currency for COGS
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export type ProductCog = typeof productCogs.$inferSelect;
+export type NewProductCog = typeof productCogs.$inferInsert;
+
+/**
+ * Custom Goals - revenue targets and alert thresholds
+ */
+export const goals = sqliteTable("goals", {
+  id: text("id").primaryKey(), // UUID
+  name: text("name").notNull(), // Goal name, e.g. "Monthly Revenue Target"
+  targetValue: real("target_value").notNull(), // Target amount
+  currentValue: real("current_value").notNull().default(0), // Current progress
+  metricType: text("metric_type").notNull(), // "revenue", "mrr", "sales_count", "new_customers"
+  period: text("period", { enum: ["daily", "weekly", "monthly", "quarterly", "yearly", "custom"] }).notNull().default("monthly"),
+  startDate: text("start_date").notNull(), // ISO date string
+  endDate: text("end_date").notNull(), // ISO date string
+  alertThreshold: real("alert_threshold").notNull().default(80), // Alert when % of target reached (default 80%)
+  alertEnabled: integer("alert_enabled", { mode: "boolean" }).notNull().default(true),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  notifyOnAchieve: integer("notify_on_achieve", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export type Goal = typeof goals.$inferSelect;
+export type NewGoal = typeof goals.$inferInsert;

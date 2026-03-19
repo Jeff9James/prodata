@@ -180,5 +180,43 @@ function initializeDatabase(sqlite: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_sales_account_id ON sales(account_id);
     CREATE INDEX IF NOT EXISTS idx_sales_timestamp ON sales(timestamp);
     CREATE INDEX IF NOT EXISTS idx_sales_platform ON sales(platform);
+
+    -- Product COGS table for profit calculations
+    CREATE TABLE IF NOT EXISTS product_cogs (
+      id TEXT PRIMARY KEY,
+      product_id TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      product_name TEXT NOT NULL,
+      cogs_amount REAL NOT NULL DEFAULT 0,
+      estimated_fee_percent REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_product_cogs_platform ON product_cogs(platform);
+    CREATE INDEX IF NOT EXISTS idx_product_cogs_product_id ON product_cogs(product_id);
+
+    -- Custom Goals table for revenue targets and alerts
+    CREATE TABLE IF NOT EXISTS goals (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      target_value REAL NOT NULL,
+      current_value REAL NOT NULL DEFAULT 0,
+      metric_type TEXT NOT NULL,
+      period TEXT NOT NULL DEFAULT 'monthly' CHECK(period IN ('daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'custom')),
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      alert_threshold REAL NOT NULL DEFAULT 80,
+      alert_enabled INTEGER NOT NULL DEFAULT 1,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      notify_on_achieve INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_goals_metric_type ON goals(metric_type);
+    CREATE INDEX IF NOT EXISTS idx_goals_is_active ON goals(is_active);
+    CREATE INDEX IF NOT EXISTS idx_goals_period ON goals(period);
   `);
 }

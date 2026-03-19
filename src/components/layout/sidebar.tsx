@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Settings, RefreshCw, ArrowUpCircle } from "lucide-react";
+import { LayoutDashboard, Settings, RefreshCw, ArrowUpCircle, TrendingUp, Wallet } from "lucide-react";
 import { apiPost } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,11 @@ const navItems = [
     label: "Dashboard",
     href: "/",
     icon: LayoutDashboard,
+  },
+  {
+    label: "Profit & Goals",
+    href: "/settings/profit",
+    icon: Wallet,
   },
   {
     label: "Settings",

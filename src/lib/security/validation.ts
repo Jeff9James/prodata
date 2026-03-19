@@ -34,6 +34,92 @@ export function validateLabel(value: unknown): ValidationError | null {
 }
 
 /**
+ * Validate a platform string (stripe, gumroad, revenuecat, amazon)
+ */
+export function validatePlatform(value: unknown): ValidationError | null {
+  if (typeof value !== "string") {
+    return { field: "platform", message: "Platform must be a string" };
+  }
+  const validPlatforms = ["stripe", "gumroad", "revenuecat", "amazon"];
+  if (!validPlatforms.includes(value.toLowerCase())) {
+    return {
+      field: "platform",
+      message: `Platform must be one of: ${validPlatforms.join(", ")}`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Validate a metric type for goals (revenue, mrr, sales_count, new_customers)
+ */
+export function validateMetricType(value: unknown): ValidationError | null {
+  if (typeof value !== "string") {
+    return { field: "metricType", message: "Metric type must be a string" };
+  }
+  const validTypes = ["revenue", "mrr", "sales_count", "new_customers"];
+  if (!validTypes.includes(value)) {
+    return {
+      field: "metricType",
+      message: `Metric type must be one of: ${validTypes.join(", ")}`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Validate a goal period (daily, weekly, monthly, quarterly, yearly, custom)
+ */
+export function validateGoalPeriod(value: unknown): ValidationError | null {
+  if (typeof value !== "string") {
+    return { field: "period", message: "Period must be a string" };
+  }
+  const validPeriods = ["daily", "weekly", "monthly", "quarterly", "yearly", "custom"];
+  if (!validPeriods.includes(value)) {
+    return {
+      field: "period",
+      message: `Period must be one of: ${validPeriods.join(", ")}`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Validate a numeric value (for amounts, percentages, etc.)
+ */
+export function validateNumericValue(
+  value: unknown,
+  fieldName: string,
+  min = 0,
+  max?: number
+): ValidationError | null {
+  if (typeof value !== "number" || isNaN(value)) {
+    return { field: fieldName, message: `${fieldName} must be a valid number` };
+  }
+  if (value < min) {
+    return { field: fieldName, message: `${fieldName} must be at least ${min}` };
+  }
+  if (max !== undefined && value > max) {
+    return { field: fieldName, message: `${fieldName} must be at most ${max}` };
+  }
+  return null;
+}
+
+/**
+ * Validate a UUID
+ */
+export function validateUUID(value: unknown): ValidationError | null {
+  if (typeof value !== "string") {
+    return { field: "id", message: "ID must be a string" };
+  }
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!UUID_REGEX.test(value)) {
+    return { field: "id", message: "ID must be a valid UUID" };
+  }
+  return null;
+}
+
+/**
  * Validate an integration ID.
  */
 export function validateIntegrationId(value: unknown): ValidationError | null {

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Sidebar } from "@/components/layout/sidebar";
+import { MobileNav } from "@/components/layout/mobile-nav";
 import { AppearanceInit } from "@/components/ui/appearance-init";
 
 const geistSans = Geist({
@@ -46,9 +47,14 @@ export default function RootLayout({
         className={`${openRunde.variable} ${geistSans.variable} ${geistMono.variable} antialiased font-sans`}
       >
         <AppearanceInit />
-        <div className="flex h-screen">
-          <Sidebar />
-          <main className="flex-1 overflow-auto">{children}</main>
+        <div className="flex h-screen flex-col">
+          <MobileNav />
+          <div className="flex flex-1 overflow-hidden">
+            <div className="hidden md:block">
+              <Sidebar />
+            </div>
+            <main className="flex-1 overflow-auto w-full">{children}</main>
+          </div>
         </div>
       </body>
     </html>
