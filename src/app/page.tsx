@@ -9,6 +9,10 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import { DashboardFilter } from "@/components/dashboard/dashboard-filter";
 import { DateRangeFilter } from "@/components/dashboard/date-range-filter";
 import { SyncStatusBar } from "@/components/dashboard/sync-status-bar";
+import { RevenueByCountryChart } from "@/components/dashboard/revenue-by-country-chart";
+import { RevenueByProductChart } from "@/components/dashboard/revenue-by-product-chart";
+import { AttributionSummary } from "@/components/dashboard/attribution-summary";
+import { InsightCards } from "@/components/dashboard/insight-cards";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatBackfillErrorDetails } from "@/components/dashboard/backfill-error";
@@ -24,6 +28,7 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useRevenueByCountry, useRevenueByProduct, useAttribution } from "@/hooks/use-metrics";
 
 export default function Dashboard() {
   const {
@@ -74,6 +79,27 @@ export default function Dashboard() {
     utcBucketedIntegrations,
     handleSyncComplete,
   } = useDashboardData();
+
+  // New breakdown hooks
+  const { data: revenueByCountryData, loading: revenueByCountryLoading } = useRevenueByCountry({
+    accountIds: enabledAccountIds.length > 0 ? [...enabledAccountIds] : undefined,
+    from: rangeFrom,
+    to: rangeTo,
+  });
+
+  const { data: revenueByProductData, loading: revenueByProductLoading } = useRevenueByProduct({
+    accountIds: enabledAccountIds.length > 0 ? [...enabledAccountIds] : undefined,
+    from: rangeFrom,
+    to: rangeTo,
+    limit: 10,
+  });
+
+  const { data: attributionData, loading: attributionLoading } = useAttribution({
+    accountIds: enabledAccountIds.length > 0 ? [...enabledAccountIds] : undefined,
+    from: rangeFrom,
+    to: rangeTo,
+    breakdown: "country",
+  });
 
   const [backfillErrorOpen, setBackfillErrorOpen] = useState(false);
 
@@ -524,6 +550,49 @@ export default function Dashboard() {
               to={rangeTo}
             />
           )}
+
+          {/* Revenue Breakdown Sections */}
+          {/* Revenue by Country */}
+          <RevenueByCountryChart
+            data={revenueByCountryData?.countries || []}
+            totalRevenue={revenueByCountryData?.totalRevenue || 0}
+            totalOrders={revenueByCountryData?.totalOrders || 0}
+            loading={revenueByCountryLoading}
+            currency={currency}
+          />
+
+          {/* Two column layout: Attribution + Insights */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Attribution Summary */}
+            <AttributionSummary
+              platforms={attributionData?.platforms || []}
+              breakdown={attributionData?.breakdown}
+              totalRevenue={attributionData?.totalRevenue || 0}
+              totalOrders={attributionData?.totalOrders || 0}
+              loading={attributionLoading}
+              currency={currency}
+            />
+
+            {/* Insight Cards */}
+            <InsightCards
+              countryData={revenueByCountryData?.countries || []}
+              productData={revenueByProductData?.groupedByName || []}
+              platformData={attributionData?.platforms || []}
+              totalRevenue={revenueByProductData?.totalRevenue || 0}
+              totalOrders={revenueByProductData?.totalOrders || 0}
+              loading={revenueByCountryLoading || revenueByProductLoading || attributionLoading}
+              currency={currency}
+            />
+          </div>
+
+          {/* Revenue by Product */}
+          <RevenueByProductChart
+            data={revenueByProductData?.groupedByName || []}
+            totalRevenue={revenueByProductData?.totalRevenue || 0}
+            totalOrders={revenueByProductData?.totalOrders || 0}
+            loading={revenueByProductLoading}
+            currency={currency}
+          />
         </div>
       )}
     </div>

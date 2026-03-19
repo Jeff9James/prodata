@@ -314,3 +314,228 @@ export function useIntegrations() {
 
   return { data, loading, error, refetch: fetchIntegrations };
 }
+
+// ─── useRevenueByCountry ───────────────────────────────────────────────────────
+
+export interface CountryRevenue {
+  country: string;
+  countryName: string;
+  revenue: number;
+  orders: number;
+  percentage: number;
+  currency: string;
+}
+
+export interface RevenueByCountryResponse {
+  totalRevenue: number;
+  totalOrders: number;
+  countries: CountryRevenue[];
+  byCountryAndPlatform: Record<string, { platform: string; revenue: number; orders: number }[]>;
+}
+
+interface UseRevenueByCountryOptions {
+  accountIds?: string[];
+  from?: string;
+  to?: string;
+  platform?: string;
+}
+
+export function useRevenueByCountry(options: UseRevenueByCountryOptions = {}) {
+  const [data, setData] = useState<RevenueByCountryResponse>({
+    totalRevenue: 0,
+    totalOrders: 0,
+    countries: [],
+    byCountryAndPlatform: {},
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const isInitialLoad = useRef(true);
+
+  const accountIdsKey = options.accountIds?.join(",") ?? "";
+
+  const fetchData = useCallback(async () => {
+    if (isInitialLoad.current) setLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams();
+      if (accountIdsKey) params.set("accountIds", accountIdsKey);
+      if (options.from) params.set("from", options.from);
+      if (options.to) params.set("to", options.to);
+      if (options.platform) params.set("platform", options.platform);
+
+      const result = await apiGet<RevenueByCountryResponse>(
+        `/api/sales/revenue-by-country?${params.toString()}`
+      );
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      if (isInitialLoad.current) setLoading(false);
+      isInitialLoad.current = false;
+    }
+  }, [accountIdsKey, options.from, options.to, options.platform]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return { data, loading, error, refetch: fetchData };
+}
+
+// ─── useRevenueByProduct ───────────────────────────────────────────────────────
+
+export interface ProductRevenue {
+  productName: string;
+  productId: string | null;
+  platform: string;
+  revenue: number;
+  orders: number;
+  percentage: number;
+  currency: string;
+}
+
+export interface GroupedProductRevenue {
+  productName: string;
+  revenue: number;
+  orders: number;
+  percentage: number;
+  platforms: string[];
+}
+
+export interface RevenueByProductResponse {
+  totalRevenue: number;
+  totalOrders: number;
+  products: ProductRevenue[];
+  groupedByName: GroupedProductRevenue[];
+}
+
+interface UseRevenueByProductOptions {
+  accountIds?: string[];
+  from?: string;
+  to?: string;
+  platform?: string;
+  limit?: number;
+}
+
+export function useRevenueByProduct(options: UseRevenueByProductOptions = {}) {
+  const [data, setData] = useState<RevenueByProductResponse>({
+    totalRevenue: 0,
+    totalOrders: 0,
+    products: [],
+    groupedByName: [],
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const isInitialLoad = useRef(true);
+
+  const accountIdsKey = options.accountIds?.join(",") ?? "";
+
+  const fetchData = useCallback(async () => {
+    if (isInitialLoad.current) setLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams();
+      if (accountIdsKey) params.set("accountIds", accountIdsKey);
+      if (options.from) params.set("from", options.from);
+      if (options.to) params.set("to", options.to);
+      if (options.platform) params.set("platform", options.platform);
+      if (options.limit) params.set("limit", options.limit.toString());
+
+      const result = await apiGet<RevenueByProductResponse>(
+        `/api/sales/revenue-by-product?${params.toString()}`
+      );
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      if (isInitialLoad.current) setLoading(false);
+      isInitialLoad.current = false;
+    }
+  }, [accountIdsKey, options.from, options.to, options.platform, options.limit]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return { data, loading, error, refetch: fetchData };
+}
+
+// ─── useAttribution ────────────────────────────────────────────────────────────
+
+export interface PlatformAttribution {
+  platform: string;
+  revenue: number;
+  orders: number;
+  percentage: number;
+  currency: string;
+}
+
+export interface AttributionBreakdown {
+  type: "country" | "none";
+  data?: Record<string, {
+    country: string;
+    countryName: string;
+    platforms: { platform: string; revenue: number; orders: number; percentage: number }[];
+    totalRevenue: number;
+  }>;
+}
+
+export interface AttributionResponse {
+  totalRevenue: number;
+  totalOrders: number;
+  platforms: PlatformAttribution[];
+  breakdown: AttributionBreakdown;
+}
+
+interface UseAttributionOptions {
+  accountIds?: string[];
+  from?: string;
+  to?: string;
+  breakdown?: "country" | "none";
+}
+
+export function useAttribution(options: UseAttributionOptions = {}) {
+  const [data, setData] = useState<AttributionResponse>({
+    totalRevenue: 0,
+    totalOrders: 0,
+    platforms: [],
+    breakdown: { type: "none" },
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const isInitialLoad = useRef(true);
+
+  const accountIdsKey = options.accountIds?.join(",") ?? "";
+  const breakdown = options.breakdown ?? "none";
+
+  const fetchData = useCallback(async () => {
+    if (isInitialLoad.current) setLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams();
+      if (accountIdsKey) params.set("accountIds", accountIdsKey);
+      if (options.from) params.set("from", options.from);
+      if (options.to) params.set("to", options.to);
+      params.set("breakdown", breakdown);
+
+      const result = await apiGet<AttributionResponse>(
+        `/api/sales/attribution?${params.toString()}`
+      );
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      if (isInitialLoad.current) setLoading(false);
+      isInitialLoad.current = false;
+    }
+  }, [accountIdsKey, options.from, options.to, breakdown]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return { data, loading, error, refetch: fetchData };
+}
