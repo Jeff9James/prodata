@@ -51,6 +51,21 @@ export async function GET(request: Request) {
 
     const db = getDb();
 
+    // Check if there are no valid account IDs (after filtering out sentinel values)
+    // If so, return empty data early to avoid unnecessary database queries
+    if (accountIds) {
+        const ids = accountIds.split(",").filter(Boolean);
+        const validIds = ids.filter(id => id !== "__none__" && id.trim() !== "");
+        if (validIds.length === 0) {
+            return NextResponse.json({
+                totalRevenue: 0,
+                totalOrders: 0,
+                platforms: [],
+                breakdown: { type: "none" },
+            });
+        }
+    }
+
     // Build filter conditions
     const conditions = [];
     if (accountIds) {

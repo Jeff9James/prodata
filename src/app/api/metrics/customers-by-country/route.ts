@@ -59,6 +59,21 @@ export async function GET(request: Request) {
 
   const db = getDb();
 
+  // Check if there are no valid account IDs (after filtering out sentinel values)
+  // If so, return empty data early to avoid unnecessary database queries
+  if (accountIds) {
+    const ids = accountIds.split(",").filter(Boolean);
+    const validIds = ids.filter(id => id !== "__none__" && id.trim() !== "");
+    if (validIds.length === 0) {
+      return NextResponse.json({
+        totals: [],
+        bySource: [],
+        accounts: {},
+        projects: {},
+      });
+    }
+  }
+
   const metricType = type === "all"
     ? "new_customers_by_country"
     : "paying_customers_by_country";
