@@ -1,5 +1,7 @@
 "use client";
 
+import { useAuth } from "@/components/auth/auth-check";
+import { LoginPrompt } from "@/components/auth/login-prompt";
 import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { MetricCard, type RankingEntry } from "@/components/dashboard/metric-card";
 import { CustomersByCountryChart } from "@/components/dashboard/customers-by-country-chart";
@@ -31,6 +33,20 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useRevenueByCountry, useRevenueByProduct, useAttribution } from "@/hooks/use-metrics";
 
 export default function Dashboard() {
+  const { user, loading: authLoading } = useAuth();
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[80vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPrompt />;
+  }
+
   const {
     loading,
     integrationsLoading,

@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { LayoutDashboard, Settings, RefreshCw, ArrowUpCircle, TrendingUp, Wallet } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LayoutDashboard, Settings, RefreshCw, ArrowUpCircle, TrendingUp, Wallet, LogOut, User } from "lucide-react";
 import { apiPost } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { BlurToggle } from "@/components/ui/blur-toggle";
 import { useUpdateCheck } from "@/hooks/use-update-check";
+import { useAuth } from "@/components/auth/auth-check";
 import { useState } from "react";
+import { supabase } from "@/lib/supabase/client";
 
 const navItems = [
   {
@@ -31,8 +33,21 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [syncing, setSyncing] = useState(false);
   const update = useUpdateCheck();
+  const { user } = useAuth();
+
+  // Hide sidebar on auth pages
+  if (pathname.startsWith("/auth/")) {
+    return null;
+  }
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push("/auth/signin");
+    router.refresh();
+  };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -56,6 +71,25 @@ export function Sidebar() {
           OhMyDashboard
         </span>
       </div>
+
+      {/* User Info */}
+      {user && (
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-primary">
+            <User className="h-4 w-4" />
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <p className="truncate text-sm font-medium">{user.email}</p>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-3 w-3" />
+              Sign out
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 p-3">

@@ -34,6 +34,11 @@ export function MobileNav() {
     const [open, setOpen] = useState(false);
     const pathname = usePathname();
 
+    // Hide mobile nav on auth pages
+    if (pathname.startsWith("/auth/")) {
+        return null;
+    }
+
     return (
         <header className="md:hidden flex h-14 items-center justify-between border-b border-border bg-card px-4">
             <div className="flex items-center gap-2">
