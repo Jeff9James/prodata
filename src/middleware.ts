@@ -32,10 +32,20 @@ export async function middleware(request: NextRequest) {
     // Refresh session if expired
     const {
         data: { user },
+        error: authError,
     } = await supabase.auth.getUser();
 
+    // If there's an auth error (e.g., network issues, invalid session),
+    // don't redirect - let the client handle it. Only redirect for
+    // truly unauthenticated users (no user and no auth error).
+    if (authError) {
+        console.error("Auth error in middleware:", authError.message);
+    }
+
     // Protected routes - redirect unauthenticated users to sign in
-    if (!user && request.nextUrl.pathname.startsWith("/settings")) {
+    // Only redirect if there's no user AND no auth error (meaning the user
+    // explicitly logged out or was never logged in)
+    if (!user && !authError && request.nextUrl.pathname.startsWith("/settings")) {
         const url = request.nextUrl.clone();
         url.pathname = "/auth/signin";
         url.searchParams.set("redirect", request.nextUrl.pathname);
