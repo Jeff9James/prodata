@@ -81,21 +81,22 @@ export default function Dashboard() {
   } = useDashboardData();
 
   // New breakdown hooks
+  const enabledAccountIdsArray = Array.from(enabledAccountIds);
   const { data: revenueByCountryData, loading: revenueByCountryLoading } = useRevenueByCountry({
-    accountIds: enabledAccountIds.length > 0 ? [...enabledAccountIds] : undefined,
+    accountIds: enabledAccountIdsArray.length > 0 ? enabledAccountIdsArray : undefined,
     from: rangeFrom,
     to: rangeTo,
   });
 
   const { data: revenueByProductData, loading: revenueByProductLoading } = useRevenueByProduct({
-    accountIds: enabledAccountIds.length > 0 ? [...enabledAccountIds] : undefined,
+    accountIds: enabledAccountIdsArray.length > 0 ? enabledAccountIdsArray : undefined,
     from: rangeFrom,
     to: rangeTo,
     limit: 10,
   });
 
   const { data: attributionData, loading: attributionLoading } = useAttribution({
-    accountIds: enabledAccountIds.length > 0 ? [...enabledAccountIds] : undefined,
+    accountIds: enabledAccountIdsArray.length > 0 ? enabledAccountIdsArray : undefined,
     from: rangeFrom,
     to: rangeTo,
     breakdown: "country",
@@ -545,7 +546,7 @@ export default function Dashboard() {
               projectLabels={customersByCountry.projects}
               accountIntegrationMap={integrations}
               loading={customersByCountryLoading}
-              accountIds={[...enabledAccountIds]}
+              accountIds={enabledAccountIdsArray}
               from={rangeFrom}
               to={rangeTo}
             />

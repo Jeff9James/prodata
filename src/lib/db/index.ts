@@ -5,7 +5,9 @@ import * as schema from "./schema";
 const DATABASE_URL = process.env.DATABASE_URL ||
   "postgresql://postgres:password@localhost:5432/postgres";
 
-let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+type PostgresDb = ReturnType<typeof drizzle<typeof schema>>;
+
+let _db: PostgresDb | null = null;
 let _sql: postgres.Sql<{}> | null = null;
 
 /**

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { goals } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
     validateLabel,
     validateNumericValue,
@@ -93,8 +94,8 @@ export async function GET(request: Request) {
         }
 
         const results = conditions.length > 0
-            ? db.select().from(goals).where(and(...conditions)).all()
-            : db.select().from(goals).all();
+            ? db.select().from(goals).where(and(...conditions)).execute()
+            : db.select().from(goals).execute();
 
         return NextResponse.json(results);
     } catch (error) {
@@ -145,12 +146,18 @@ export async function POST(request: Request) {
 
         const db = getDb();
         const now = new Date().toISOString();
-        const id = crypto.randomUUID();
+        // Get user ID from session
+        const supabase = await createSupabaseServerClient();
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
         const inserted = await db
             .insert(goals)
             .values({
-                id,
+                userId: user.id,
                 name,
                 targetValue,
                 currentValue: 0,
@@ -164,7 +171,7 @@ export async function POST(request: Request) {
                 notifyOnAchieve,
                 createdAt: now,
                 updatedAt: now,
-            })
+            } as any)
             .returning();
 
         return NextResponse.json(inserted[0], { status: 201 });

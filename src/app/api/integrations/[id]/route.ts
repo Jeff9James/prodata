@@ -19,17 +19,19 @@ export async function DELETE(
   const { id } = await params;
   const db = getDb();
 
-  const account = db
+  const accountResult = await db
     .select()
     .from(accounts)
     .where(eq(accounts.id, id))
-    .get();
+    .execute();
+
+  const account = accountResult[0];
 
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
-  db.delete(accounts).where(eq(accounts.id, id)).run();
+  await db.delete(accounts).where(eq(accounts.id, id)).execute();
 
   return NextResponse.json({ success: true });
 }
@@ -60,19 +62,21 @@ export async function PATCH(
 
   const db = getDb();
 
-  const account = db
+  const accountResult = await db
     .select()
     .from(accounts)
     .where(eq(accounts.id, id))
-    .get();
+    .execute();
+
+  const account = accountResult[0];
 
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
   // Strict allowlist — only label and isActive can be updated
-  const updates: { updatedAt: string; label?: string; isActive?: boolean } = {
-    updatedAt: new Date().toISOString(),
+  const updates: { updatedAt: Date; label?: string; isActive?: boolean } = {
+    updatedAt: new Date(),
   };
 
   if (body.label !== undefined) {
@@ -97,7 +101,7 @@ export async function PATCH(
     updates.isActive = body.isActive as boolean;
   }
 
-  db.update(accounts).set(updates).where(eq(accounts.id, id)).run();
+  await db.update(accounts).set(updates).where(eq(accounts.id, id)).execute();
 
   return NextResponse.json({ success: true });
 }

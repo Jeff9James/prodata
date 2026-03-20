@@ -87,7 +87,7 @@ export async function GET(request: Request) {
   let rawRows: { country: string; count: number; accountId: string; projectId: string | null }[];
 
   if (isStockMetric) {
-    const allRows = db
+    const allRows = await db
       .select({
         country: sql<string>`json_extract(${metrics.metadata}, '$.country')`.as("country"),
         value: sql<number>`CAST(${metrics.value} AS INTEGER)`.as("value"),
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
       })
       .from(metrics)
       .where(and(...conditions))
-      .all();
+      .execute();
 
     const latestDateBySource = new Map<string, string>();
     for (const row of allRows) {
@@ -122,7 +122,7 @@ export async function GET(request: Request) {
 
     rawRows = Array.from(agg.values()).sort((a, b) => b.count - a.count);
   } else {
-    rawRows = db
+    rawRows = await db
       .select({
         country: sql<string>`json_extract(${metrics.metadata}, '$.country')`.as("country"),
         count: sql<number>`CAST(SUM(${metrics.value}) AS INTEGER)`.as("count"),
@@ -137,7 +137,7 @@ export async function GET(request: Request) {
         metrics.projectId
       )
       .orderBy(sql`SUM(${metrics.value}) DESC`)
-      .all();
+      .execute();
   }
 
   // ── Blending: identify accounts that have product-level data ──
@@ -174,11 +174,11 @@ export async function GET(request: Request) {
   // ── Batch lookups ──
   const accountLabels: Record<string, string> = {};
   if (refAccountIds.size > 0) {
-    const accountRows = db
+    const accountRows = await db
       .select({ id: accounts.id, label: accounts.label })
       .from(accounts)
       .where(inArray(accounts.id, [...refAccountIds]))
-      .all();
+      .execute();
     for (const row of accountRows) {
       accountLabels[row.id] = row.label;
     }
@@ -186,11 +186,11 @@ export async function GET(request: Request) {
 
   const projectLabels: Record<string, { label: string; accountId: string }> = {};
   if (refProjectIds.size > 0) {
-    const projectRows = db
+    const projectRows = await db
       .select({ id: projects.id, label: projects.label, accountId: projects.accountId })
       .from(projects)
       .where(inArray(projects.id, [...refProjectIds]))
-      .all();
+      .execute();
     for (const row of projectRows) {
       projectLabels[row.id] = { label: row.label, accountId: row.accountId };
     }

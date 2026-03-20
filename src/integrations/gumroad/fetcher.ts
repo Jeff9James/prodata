@@ -550,7 +550,8 @@ function computeProductsCount(
  */
 function computeSalesRecords(
   sales: GumroadSale[],
-  productLookup: Map<string, GumroadProduct>
+  productLookup: Map<string, GumroadProduct>,
+  account: AccountConfig
 ): NewSale[] {
   const records: NewSale[] = [];
 
@@ -563,7 +564,8 @@ function computeSalesRecords(
 
     records.push({
       id: `gumroad-${sale.id}`,
-      accountId: "", // Will be set by sync engine
+      userId: account.userId || "",
+      accountId: account.id,
       projectId: sale.product_id,
       platform: "gumroad",
       productName: product?.name ?? sale.product_name,
@@ -572,7 +574,7 @@ function computeSalesRecords(
       currency: "USD",
       country: sale.country_iso2?.toUpperCase(),
       countryName: sale.country,
-      timestamp: sale.created_at,
+      timestamp: new Date(sale.created_at),
       metadata: JSON.stringify({
         orderId: sale.id,
         email: sale.email,
@@ -580,7 +582,7 @@ function computeSalesRecords(
         recurring: !!sale.recurring_charge,
         quantity: sale.quantity,
       }),
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
     });
   }
 
@@ -884,7 +886,7 @@ export const gumroadFetcher: DataFetcher = {
       }
       const salesMetrics = computeSalesMetrics(sales, productLookup);
       allMetrics.push(...salesMetrics);
-      salesRecords = computeSalesRecords(sales, productLookup);
+      salesRecords = computeSalesRecords(sales, productLookup, account);
       totalRecords += sales.length;
       const step: SyncStep = {
         key: "fetch_sales",

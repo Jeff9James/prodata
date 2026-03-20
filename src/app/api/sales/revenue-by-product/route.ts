@@ -61,12 +61,12 @@ export async function GET(request: Request) {
             conditions.push(inArray(sales.accountId, ids));
         }
     }
-    if (from) conditions.push(gte(sales.timestamp, from));
-    if (to) conditions.push(lte(sales.timestamp, to + "T23:59:59.999Z"));
+    if (from) conditions.push(gte(sales.timestamp, new Date(from)));
+    if (to) conditions.push(lte(sales.timestamp, new Date(to + "T23:59:59.999Z")));
     if (platform) conditions.push(eq(sales.platform, platform));
 
     // Aggregate revenue by product
-    const revenueByProduct = db
+    const revenueByProduct = await db
         .select({
             productName: sales.productName,
             productId: sql<string | null>`${sales.productId}`.as("productId"),
@@ -81,7 +81,7 @@ export async function GET(request: Request) {
         .groupBy(sales.productName, sales.productId, sales.platform, sales.accountId, sales.currency)
         .orderBy(desc(sql`SUM(${sales.amount})`))
         .limit(limit)
-        .all();
+        .execute();
 
     // Calculate totals
     const totalRevenue = revenueByProduct.reduce((sum, row) => sum + (row.totalRevenue || 0), 0);

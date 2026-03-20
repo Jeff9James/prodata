@@ -8,6 +8,7 @@ import {
     validatePlatform,
     validateUUID,
 } from "@/lib/security";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
  * Validate product COGS creation/update data
@@ -75,9 +76,9 @@ export async function GET(request: Request) {
                         eq(productCogs.productId, productId)
                     )
                 )
-                .all();
+                .execute();
         } else {
-            results = await db.select().from(productCogs).all();
+            results = await db.select().from(productCogs).execute();
         }
 
         return NextResponse.json(results);
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
         }
 
         const db = getDb();
-        const now = new Date().toISOString();
+        const now = new Date();
         const id = crypto.randomUUID();
 
         // Check if COGS entry already exists for this product
@@ -152,11 +153,19 @@ export async function POST(request: Request) {
             return NextResponse.json(updated[0]);
         }
 
+        // Get user ID from session
+        const supabase = await createSupabaseServerClient();
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         // Insert new entry
         const inserted = await db
             .insert(productCogs)
             .values({
-                id,
+                userId: user.id,
                 productId,
                 platform,
                 productName,

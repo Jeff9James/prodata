@@ -70,7 +70,7 @@ export async function GET(request: Request) {
   if (to) conditions.push(lte(metrics.date, to));
 
   if (aggregation === "total") {
-    const result = db
+    const result = await db
       .select({
         projectId: metrics.projectId,
         metricType: metrics.metricType,
@@ -81,13 +81,13 @@ export async function GET(request: Request) {
       .from(metrics)
       .where(and(...conditions))
       .groupBy(metrics.projectId, metrics.metricType, metrics.currency)
-      .all();
+      .execute();
 
     return NextResponse.json(result);
   }
 
   // Daily per-product metrics
-  const result = db
+  const result = await db
     .select({
       id: metrics.id,
       accountId: metrics.accountId,
@@ -101,18 +101,18 @@ export async function GET(request: Request) {
     .from(metrics)
     .where(and(...conditions))
     .orderBy(desc(metrics.date))
-    .all();
+    .execute();
 
   // Enrich with project labels (single batch query)
   const resultProjectIds = [...new Set(result.map((r) => r.projectId).filter(Boolean))] as string[];
   const projectLabels: Record<string, { label: string; accountId: string }> = {};
 
   if (resultProjectIds.length > 0) {
-    const projectRows = db
+    const projectRows = await db
       .select({ id: projects.id, label: projects.label, accountId: projects.accountId })
       .from(projects)
       .where(inArray(projects.id, resultProjectIds))
-      .all();
+      .execute();
     for (const row of projectRows) {
       projectLabels[row.id] = { label: row.label, accountId: row.accountId };
     }
@@ -123,11 +123,11 @@ export async function GET(request: Request) {
   const accountLabels: Record<string, string> = {};
 
   if (resultAccountIds.length > 0) {
-    const accountRows = db
+    const accountRows = await db
       .select({ id: accounts.id, label: accounts.label })
       .from(accounts)
       .where(inArray(accounts.id, resultAccountIds))
-      .all();
+      .execute();
     for (const row of accountRows) {
       accountLabels[row.id] = row.label;
     }

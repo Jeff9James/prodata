@@ -5,8 +5,8 @@ export type SyncProgressStatus = "running" | "success" | "error";
 export interface SyncProgress {
   accountId: string;
   status: SyncProgressStatus;
-  startedAt: string;
-  completedAt?: string;
+  startedAt: Date;
+  completedAt?: Date;
   error?: string;
   recordsProcessed?: number;
   steps: SyncStep[];
@@ -32,7 +32,7 @@ export function startSyncProgress(accountId: string) {
   progressByAccount.set(accountId, {
     accountId,
     status: "running",
-    startedAt: new Date().toISOString(),
+    startedAt: new Date(),
     steps: [],
   });
   scheduleCleanup(accountId);
@@ -70,7 +70,7 @@ export function finalizeSyncProgress(
     success: boolean;
     recordsProcessed: number;
     error?: string;
-    completedAt: string;
+    completedAt: Date;
     steps?: SyncStep[];
   }
 ) {

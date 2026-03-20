@@ -51,6 +51,8 @@ export interface AccountConfig {
   label: string;
   /** Credential values keyed by CredentialField.key */
   credentials: Record<string, string>;
+  /** User ID who owns this account (for multi-user support) */
+  userId?: string;
 }
 
 export interface ProjectConfig {

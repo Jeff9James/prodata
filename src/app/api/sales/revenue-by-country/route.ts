@@ -69,12 +69,12 @@ export async function GET(request: Request) {
             conditions.push(inArray(sales.accountId, ids));
         }
     }
-    if (from) conditions.push(gte(sales.timestamp, from));
-    if (to) conditions.push(lte(sales.timestamp, to + "T23:59:59.999Z"));
+    if (from) conditions.push(gte(sales.timestamp, new Date(from)));
+    if (to) conditions.push(lte(sales.timestamp, new Date(to + "T23:59:59.999Z")));
     if (platform) conditions.push(eq(sales.platform, platform));
 
     // Aggregate revenue by country
-    const revenueByCountry = db
+    const revenueByCountry = await db
         .select({
             country: sql<string | null>`${sales.country}`.as("country"),
             countryName: sales.countryName,
@@ -86,10 +86,10 @@ export async function GET(request: Request) {
         .where(and(...conditions))
         .groupBy(sales.country, sales.countryName, sales.currency)
         .orderBy(desc(sql`SUM(${sales.amount})`))
-        .all();
+        .execute();
 
     // Also get breakdown by country and platform
-    const revenueByCountryAndPlatform = db
+    const revenueByCountryAndPlatform = await db
         .select({
             country: sql<string | null>`${sales.country}`.as("country"),
             countryName: sales.countryName,
@@ -102,7 +102,7 @@ export async function GET(request: Request) {
         .where(and(...conditions))
         .groupBy(sales.country, sales.countryName, sales.platform, sales.currency)
         .orderBy(desc(sql`SUM(${sales.amount})`))
-        .all();
+        .execute();
 
     // Calculate totals
     const totalRevenue = revenueByCountry.reduce((sum, row) => sum + (row.totalRevenue || 0), 0);
@@ -138,15 +138,4 @@ export async function GET(request: Request) {
         countries: countryTotals,
         byCountryAndPlatform: Object.fromEntries(countryPlatformMap),
     });
-}
-
-// Helper function to get country name from code
-function getCountryName(code: string): string {
-    if (!code || code === "Unknown") return "Unknown";
-    try {
-        const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
-        return displayNames.of(code.toUpperCase()) || code;
-    } catch {
-        return code;
-    }
 }

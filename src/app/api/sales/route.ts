@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     }
 
     // Fetch sales records
-    const saleRecords = db
+    const saleRecords = await db
         .select({
             id: sales.id,
             accountId: sales.accountId,
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
         .where(and(...conditions))
         .orderBy(desc(sales.timestamp))
         .limit(limit)
-        .all();
+        .execute();
 
     // Batch account and project label lookup
     const accountIdsSet = new Set<string>();
@@ -82,11 +82,11 @@ export async function GET(request: Request) {
 
     const accountLabels: Record<string, string> = {};
     if (accountIdsSet.size > 0) {
-        const accountRows = db
+        const accountRows = await db
             .select({ id: accounts.id, label: accounts.label })
             .from(accounts)
             .where(inArray(accounts.id, Array.from(accountIdsSet)))
-            .all();
+            .execute();
         for (const row of accountRows) {
             accountLabels[row.id] = row.label;
         }
@@ -94,11 +94,11 @@ export async function GET(request: Request) {
 
     const projectLabels: Record<string, string> = {};
     if (projectIdsSet.size > 0) {
-        const projectRows = db
+        const projectRows = await db
             .select({ id: projects.id, label: projects.label })
             .from(projects)
             .where(inArray(projects.id, Array.from(projectIdsSet)))
-            .all();
+            .execute();
         for (const row of projectRows) {
             projectLabels[row.id] = row.label;
         }
@@ -107,7 +107,7 @@ export async function GET(request: Request) {
     // Parse metadata JSON
     const salesWithMetadata = saleRecords.map((sale) => ({
         ...sale,
-        metadata: JSON.parse(sale.metadata),
+        metadata: JSON.parse(sale.metadata as string),
     }));
 
     return NextResponse.json({

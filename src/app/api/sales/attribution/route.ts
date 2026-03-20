@@ -59,11 +59,11 @@ export async function GET(request: Request) {
             conditions.push(inArray(sales.accountId, ids));
         }
     }
-    if (from) conditions.push(gte(sales.timestamp, from));
-    if (to) conditions.push(lte(sales.timestamp, to + "T23:59:59.999Z"));
+    if (from) conditions.push(gte(sales.timestamp, new Date(from)));
+    if (to) conditions.push(lte(sales.timestamp, new Date(to + "T23:59:59.999Z")));
 
     // Get overall platform attribution
-    const platformAttribution = db
+    const platformAttribution = await db
         .select({
             platform: sales.platform,
             totalRevenue: sql<number>`SUM(${sales.amount})`.as("totalRevenue"),
@@ -74,7 +74,7 @@ export async function GET(request: Request) {
         .where(and(...conditions))
         .groupBy(sales.platform, sales.currency)
         .orderBy(desc(sql`SUM(${sales.amount})`))
-        .all();
+        .execute();
 
     // Calculate total revenue
     const totalRevenue = platformAttribution.reduce((sum, row) => sum + (row.totalRevenue || 0), 0);
@@ -90,9 +90,10 @@ export async function GET(request: Request) {
     }));
 
     // Get breakdown by country if requested
-    let countryBreakdown: Record<string, typeof platforms> = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let countryBreakdown: Record<string, any> = {};
     if (breakdown === "country") {
-        const revenueByCountryAndPlatform = db
+        const revenueByCountryAndPlatform = await db
             .select({
                 country: sql<string | null>`${sales.country}`.as("country"),
                 countryName: sales.countryName,
@@ -105,7 +106,7 @@ export async function GET(request: Request) {
             .where(and(...conditions))
             .groupBy(sales.country, sales.countryName, sales.platform, sales.currency)
             .orderBy(desc(sql`SUM(${sales.amount})`))
-            .all();
+            .execute();
 
         // Group by country
         const countryMap = new Map<string, {

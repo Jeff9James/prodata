@@ -12,9 +12,9 @@ import {
   validateLabel,
   validateIntegrationId,
   validateCredentials,
-  generateSecureId,
 } from "@/lib/security";
 import { desc } from "drizzle-orm";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // Ensure integrations are loaded
 let loaded = false;
@@ -34,9 +34,9 @@ export async function GET() {
 
   const db = getDb();
   const allIntegrations = getAllIntegrations();
-  const allAccounts = db.select().from(accounts).all();
-  const allProjects = db.select().from(projects).all();
-  const allSyncLogs = db.select().from(syncLogs).orderBy(desc(syncLogs.startedAt)).all();
+  const allAccounts = await db.select().from(accounts).execute();
+  const allProjects = await db.select().from(projects).execute();
+  const allSyncLogs = await db.select().from(syncLogs).orderBy(desc(syncLogs.startedAt)).execute();
 
   const latestSyncByAccount = new Map<string, (typeof syncLogs.$inferSelect)>();
   for (const log of allSyncLogs) {
@@ -64,12 +64,12 @@ export async function GET() {
         createdAt: a.createdAt,
         lastSync: latestSyncByAccount.get(a.id)
           ? {
-              status: latestSyncByAccount.get(a.id)!.status,
-              startedAt: latestSyncByAccount.get(a.id)!.startedAt,
-              completedAt: latestSyncByAccount.get(a.id)!.completedAt,
-              error: latestSyncByAccount.get(a.id)!.error,
-              recordsProcessed: latestSyncByAccount.get(a.id)!.recordsProcessed,
-            }
+            status: latestSyncByAccount.get(a.id)!.status,
+            startedAt: latestSyncByAccount.get(a.id)!.startedAt,
+            completedAt: latestSyncByAccount.get(a.id)!.completedAt,
+            error: latestSyncByAccount.get(a.id)!.error,
+            recordsProcessed: latestSyncByAccount.get(a.id)!.recordsProcessed,
+          }
           : null,
         // Include products (projects) for this account
         products: allProjects
@@ -150,16 +150,23 @@ export async function POST(request: Request) {
     );
   }
 
+  // Get user ID from session
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const db = getDb();
-  const now = new Date().toISOString();
-  const id = generateSecureId();
+  const now = new Date();
 
   // Encrypt credentials before storing
   const encryptedCredentials = encrypt(JSON.stringify(credentials));
 
-  db.insert(accounts)
+  const result = await db.insert(accounts)
     .values({
-      id,
+      userId: user.id,
       integrationId: integrationId as string,
       label: (label as string).trim(),
       credentials: encryptedCredentials,
@@ -167,10 +174,12 @@ export async function POST(request: Request) {
       createdAt: now,
       updatedAt: now,
     })
-    .run();
+    .returning();
+
+  const newAccount = result[0];
 
   return NextResponse.json(
-    { id, integrationId, label, isActive: true },
+    { id: newAccount.id, integrationId, label, isActive: true },
     { status: 201 }
   );
 }

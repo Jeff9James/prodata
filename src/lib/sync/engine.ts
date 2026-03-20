@@ -56,8 +56,8 @@ export async function syncAccount(
   recordsProcessed: number;
   error?: string;
   steps?: SyncStep[];
-  startedAt?: string;
-  completedAt?: string;
+  startedAt?: Date;
+  completedAt?: Date;
 }> {
   const database = db || (getDb() as unknown as Db);
 
@@ -101,7 +101,7 @@ export async function syncAccount(
     .get();
 
   if (runningLog) {
-    const startedAtMs = Date.parse(runningLog.startedAt);
+    const startedAtMs = Date.parse(runningLog.startedAt.toISOString());
     const nowMs = Date.now();
     if (!Number.isNaN(startedAtMs) && nowMs - startedAtMs < RUNNING_SYNC_TTL_MS) {
       return {
@@ -112,8 +112,8 @@ export async function syncAccount(
     }
 
     // Mark stale running syncs as errored so a new sync can proceed.
-    const completedAt = new Date().toISOString();
-    database
+    const completedAt = new Date();
+    await database
       .update(syncLogs)
       .set({
         status: "error",
@@ -121,7 +121,7 @@ export async function syncAccount(
         error: "Stale running sync detected",
       })
       .where(eq(syncLogs.id, runningLog.id))
-      .run();
+      .execute();
   }
 
   // Acquire the lock before inserting the sync log row.
@@ -140,17 +140,19 @@ export async function syncAccount(
 
     // Create a sync log entry
     const syncLogId = generateSecureId();
-    const startedAt = new Date().toISOString();
+    const startedAt = new Date();
+    const userId = account.userId;
 
-    database
+    await database
       .insert(syncLogs)
       .values({
         id: syncLogId,
+        userId,
         accountId,
         status: "running",
         startedAt,
       })
-      .run();
+      .execute();
 
     try {
       startSyncProgress(accountId);
@@ -196,9 +198,9 @@ export async function syncAccount(
           ? sanitizeErrorMessage(result.error)
           : "Sync failed";
 
-        const completedAt = new Date().toISOString();
+        const completedAt = new Date();
 
-        database
+        await database
           .update(syncLogs)
           .set({
             status: "error",
@@ -207,7 +209,7 @@ export async function syncAccount(
             recordsProcessed: 0,
           })
           .where(eq(syncLogs.id, syncLogId))
-          .run();
+          .execute();
 
         finalizeSyncProgress(accountId, {
           success: false,
@@ -259,9 +261,9 @@ export async function syncAccount(
       }
 
       // Mark sync as successful
-      const completedAt = new Date().toISOString();
+      const completedAt = new Date();
 
-      database
+      await database
         .update(syncLogs)
         .set({
           status: "success",
@@ -269,7 +271,7 @@ export async function syncAccount(
           recordsProcessed: result.recordsProcessed,
         })
         .where(eq(syncLogs.id, syncLogId))
-        .run();
+        .execute();
 
       finalizeSyncProgress(accountId, {
         success: true,
@@ -288,9 +290,9 @@ export async function syncAccount(
       const rawMessage =
         error instanceof Error ? error.message : "Unknown error";
       const safeError = sanitizeErrorMessage(rawMessage);
-      const completedAt = new Date().toISOString();
+      const completedAt = new Date();
 
-      database
+      await database
         .update(syncLogs)
         .set({
           status: "error",
@@ -298,7 +300,7 @@ export async function syncAccount(
           error: safeError,
         })
         .where(eq(syncLogs.id, syncLogId))
-        .run();
+        .execute();
 
       finalizeSyncProgress(accountId, {
         success: false,
@@ -327,8 +329,9 @@ export async function syncAccount(
 function ensureProjects(
   db: Db,
   accountId: string,
+  userId: string,
   metricsWithProjects: NormalizedMetric[]
-): void {
+): Promise<void> {
   // Collect unique projectIds with their labels
   const projectMap = new Map<string, string>();
   for (const metric of metricsWithProjects) {
@@ -339,26 +342,27 @@ function ensureProjects(
 
   if (projectMap.size === 0) return;
 
-  const now = new Date().toISOString();
+  const now = new Date();
 
   // Check which projects already exist (single query)
   const existingIds = new Set(
-    db.select({ id: projects.id }).from(projects).all().map((p) => p.id)
+    (await db.select({ id: projects.id }).from(projects).execute()).map((p) => p.id)
   );
 
   // Insert only the new ones
   for (const [projectId, label] of projectMap) {
     if (!existingIds.has(projectId)) {
-      db.insert(projects)
+      await db.insert(projects)
         .values({
           id: projectId,
+          userId,
           accountId,
           label,
           filters: "{}",
           createdAt: now,
           updatedAt: now,
         })
-        .run();
+        .execute();
     }
   }
 }
@@ -390,7 +394,7 @@ function storeMetricsBatch(
     const now = new Date().toISOString();
 
     // Batch-ensure all referenced projects first (single pass)
-    ensureProjects(tx as unknown as Db, accountId, batch);
+    await ensureProjects(tx as unknown as Db, accountId, userId, batch);
 
     for (const metric of batch) {
       const resolvedProjectId = metric.projectId || null;

@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { projectGroups, projectGroupMembers } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { validateCsrf, validateLabel, generateSecureId } from "@/lib/security";
+import { validateCsrf, validateLabel } from "@/lib/security";
 import { accounts, projects } from "@/lib/db/schema";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -43,11 +44,13 @@ export async function PUT(
 
   const db = getDb();
 
-  const group = db
+  const groupResult = await db
     .select()
     .from(projectGroups)
     .where(eq(projectGroups.id, id))
-    .get();
+    .execute();
+
+  const group = groupResult[0];
 
   if (!group) {
     return NextResponse.json(
@@ -56,7 +59,7 @@ export async function PUT(
     );
   }
 
-  const now = new Date().toISOString();
+  const now = new Date();
 
   // Update name if provided
   if (body.name !== undefined) {
@@ -68,10 +71,10 @@ export async function PUT(
       );
     }
 
-    db.update(projectGroups)
+    await db.update(projectGroups)
       .set({ name: (body.name as string).trim(), updatedAt: now })
       .where(eq(projectGroups.id, id))
-      .run();
+      .execute();
   }
 
   // Replace members if provided
@@ -97,11 +100,12 @@ export async function PUT(
         );
       }
 
-      const account = db
+      const accountResult = await db
         .select()
         .from(accounts)
         .where(eq(accounts.id, member.accountId))
-        .get();
+        .execute();
+      const account = accountResult[0];
       if (!account) {
         return NextResponse.json(
           { error: `Account "${member.accountId}" not found` },
@@ -110,11 +114,12 @@ export async function PUT(
       }
 
       if (member.projectId) {
-        const project = db
+        const projectResult = await db
           .select()
           .from(projects)
           .where(eq(projects.id, member.projectId))
-          .get();
+          .execute();
+        const project = projectResult[0];
         if (!project) {
           return NextResponse.json(
             { error: `Project "${member.projectId}" not found` },
@@ -126,27 +131,35 @@ export async function PUT(
 
     // Replace members atomically — delete + reinsert in a single transaction
     // so a crash or concurrent request can't leave the group in a partial state.
-    db.transaction((tx) => {
-      tx.delete(projectGroupMembers)
+    await db.transaction(async (tx) => {
+      await tx.delete(projectGroupMembers)
         .where(eq(projectGroupMembers.groupId, id))
-        .run();
+        .execute();
+
+      // Get user ID from session
+      const supabase = await createSupabaseServerClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
 
       for (const member of members as MemberInput[]) {
-        tx.insert(projectGroupMembers)
+        await tx.insert(projectGroupMembers)
           .values({
-            id: generateSecureId(),
+            userId: user.id,
             groupId: id,
             accountId: member.accountId,
             projectId: member.projectId ?? null,
             createdAt: now,
           })
-          .run();
+          .execute();
       }
 
-      tx.update(projectGroups)
+      await tx.update(projectGroups)
         .set({ updatedAt: now })
         .where(eq(projectGroups.id, id))
-        .run();
+        .execute();
     });
   }
 
@@ -169,11 +182,13 @@ export async function DELETE(
   const { id } = await params;
   const db = getDb();
 
-  const group = db
+  const groupResult = await db
     .select()
     .from(projectGroups)
     .where(eq(projectGroups.id, id))
-    .get();
+    .execute();
+
+  const group = groupResult[0];
 
   if (!group) {
     return NextResponse.json(
@@ -182,7 +197,7 @@ export async function DELETE(
     );
   }
 
-  db.delete(projectGroups).where(eq(projectGroups.id, id)).run();
+  await db.delete(projectGroups).where(eq(projectGroups.id, id)).execute();
 
   return NextResponse.json({ success: true });
 }

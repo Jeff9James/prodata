@@ -443,7 +443,8 @@ async function fetchCatalogCount(
  */
 function computeSalesRecords(
     orders: AmazonOrder[],
-    currency: string
+    currency: string,
+    account: AccountConfig
 ): NewSale[] {
     const records: NewSale[] = [];
 
@@ -474,7 +475,8 @@ function computeSalesRecords(
 
         records.push({
             id: `amazon-${order.AmazonOrderId}`,
-            accountId: "", // Will be set by sync engine
+            userId: account.userId || "",
+            accountId: account.id,
             projectId: productId, // Using ASIN as product ID
             platform: "amazon",
             productName,
@@ -483,7 +485,7 @@ function computeSalesRecords(
             currency: currency,
             country: "US", // Amazon SP-API doesn't provide country directly, defaulting to US
             countryName: "United States",
-            timestamp: order.PurchaseDate,
+            timestamp: new Date(order.PurchaseDate),
             metadata: JSON.stringify({
                 orderId: order.AmazonOrderId,
                 buyerEmail: order.BuyerEmail,
@@ -491,8 +493,8 @@ function computeSalesRecords(
                 numberOfItems: order.NumberOfItemsShipped + order.NumberOfItemsUnshipped,
                 isPrime: order.IsPrime,
                 fulfillmentChannel: order.FulfillmentChannel,
-            }),
-            createdAt: new Date().toISOString(),
+            }) as unknown as object,
+            createdAt: new Date(),
         });
     }
 
@@ -786,7 +788,7 @@ export async function amazonSync(
 
         // Compute normalized metrics following Gumroad's pattern
         const metrics = computeMetrics(orders, financialGroups, productsCount, currency);
-        const salesRecords = computeSalesRecords(orders, currency);
+        const salesRecords = computeSalesRecords(orders, currency, account);
 
         // Set accountId on sales records
         const salesRecordsWithAccountId = salesRecords.map((sale) => ({

@@ -7,7 +7,8 @@ import {
   projects,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { validateCsrf, validateLabel, generateSecureId } from "@/lib/security";
+import { validateCsrf, validateLabel } from "@/lib/security";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -32,10 +33,10 @@ interface MemberInput {
 export async function GET() {
   const db = getDb();
 
-  const allGroups = db.select().from(projectGroups).all();
-  const allMembers = db.select().from(projectGroupMembers).all();
-  const allAccounts = db.select().from(accounts).all();
-  const allProjects = db.select().from(projects).all();
+  const allGroups = await db.select().from(projectGroups).execute();
+  const allMembers = await db.select().from(projectGroupMembers).execute();
+  const allAccounts = await db.select().from(accounts).execute();
+  const allProjects = await db.select().from(projects).execute();
 
   const accountMap = new Map(allAccounts.map((a) => [a.id, a]));
   const projectMap = new Map(allProjects.map((p) => [p.id, p]));
@@ -124,11 +125,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const account = db
+    const accountResult = await db
       .select()
       .from(accounts)
       .where(eq(accounts.id, member.accountId))
-      .get();
+      .execute();
+    const account = accountResult[0];
     if (!account) {
       return NextResponse.json(
         { error: `Account "${member.accountId}" not found` },
@@ -137,11 +139,12 @@ export async function POST(request: Request) {
     }
 
     if (member.projectId) {
-      const project = db
+      const projectResult = await db
         .select()
         .from(projects)
         .where(eq(projects.id, member.projectId))
-        .get();
+        .execute();
+      const project = projectResult[0];
       if (!project) {
         return NextResponse.json(
           { error: `Project "${member.projectId}" not found` },
@@ -151,33 +154,45 @@ export async function POST(request: Request) {
     }
   }
 
-  const now = new Date().toISOString();
-  const groupId = generateSecureId();
+  // Get user ID from session
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const now = new Date();
 
   // Insert group + members atomically so a crash mid-way can't leave
   // an orphaned group with partial members.
-  db.transaction((tx) => {
-    tx.insert(projectGroups)
+  const result = await db.transaction(async (tx) => {
+    await tx.insert(projectGroups)
       .values({
-        id: groupId,
+        userId: user.id,
         name: (name as string).trim(),
         createdAt: now,
         updatedAt: now,
       })
-      .run();
+      .execute();
+
+    const groupResult = await tx.select().from(projectGroups).where(eq(projectGroups.name, (name as string).trim())).execute();
+    const groupId = groupResult[0].id;
 
     for (const member of members as MemberInput[]) {
-      tx.insert(projectGroupMembers)
+      await tx.insert(projectGroupMembers)
         .values({
-          id: generateSecureId(),
+          userId: user.id,
           groupId,
           accountId: member.accountId,
           projectId: member.projectId ?? null,
           createdAt: now,
         })
-        .run();
+        .execute();
     }
+
+    return { groupId, name: (name as string).trim() };
   });
 
-  return NextResponse.json({ id: groupId, name }, { status: 201 });
+  return NextResponse.json({ id: result.groupId, name: result.name }, { status: 201 });
 }

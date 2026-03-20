@@ -32,7 +32,7 @@ async function calculateGoalProgress(
     try {
         if (isStockMetric) {
             // For stock metrics, get the latest value in the period
-            const result = db
+            const result = await db
                 .select({
                     value: metrics.value,
                 })
@@ -46,12 +46,12 @@ async function calculateGoalProgress(
                 )
                 .orderBy(sql`${metrics.date} DESC`)
                 .limit(1)
-                .all();
+                .execute();
 
             return result.length > 0 ? result[0].value : 0;
         } else {
             // For flow metrics, sum all values in the period
-            const result = db
+            const result = await db
                 .select({
                     total: sql<number>`SUM(${metrics.value})`.as("total"),
                 })
@@ -63,7 +63,7 @@ async function calculateGoalProgress(
                         lte(metrics.date, endDate)
                     )
                 )
-                .all();
+                .execute();
 
             return result.length > 0 ? (result[0].total ?? 0) : 0;
         }
@@ -82,11 +82,13 @@ export async function POST(request: Request) {
         const db = getDb();
 
         // Get all active goals
-        const activeGoals = await db
+        const activeGoalsResult = await db
             .select()
             .from(goals)
             .where(eq(goals.isActive, true))
-            .all();
+            .execute();
+
+        const activeGoals = activeGoalsResult;
 
         if (activeGoals.length === 0) {
             return NextResponse.json({ message: "No active goals to sync", synced: 0 });
@@ -94,7 +96,7 @@ export async function POST(request: Request) {
 
         // Calculate and update progress for each goal
         const results = [];
-        const now = new Date().toISOString();
+        const now = new Date();
 
         for (const goal of activeGoals) {
             const currentValue = await calculateGoalProgress(db, goal);

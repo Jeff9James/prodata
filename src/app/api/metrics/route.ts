@@ -126,12 +126,12 @@ export async function GET(request: Request) {
           )
           .where(sql`${metrics.projectId} IS NULL`)
           .groupBy(metrics.metricType, metrics.currency)
-          .all();
+          .execute();
 
         return NextResponse.json(result);
       }
 
-      const result = db
+      const result = await db
         .select({
           metricType: metrics.metricType,
           total: sql<number>`SUM(${metrics.value})`,
@@ -141,13 +141,13 @@ export async function GET(request: Request) {
         .from(metrics)
         .where(and(...conditions))
         .groupBy(metrics.metricType, metrics.currency)
-        .all();
+        .execute();
 
       return NextResponse.json(result);
     }
 
     // Mixed totals: sum flow metrics, use latest value per account for stock metrics.
-    const flowTotals = db
+    const flowTotals = await db
       .select({
         metricType: metrics.metricType,
         total: sql<number>`SUM(${metrics.value})`,
@@ -157,7 +157,7 @@ export async function GET(request: Request) {
       .from(metrics)
       .where(and(...conditions, notInArray(metrics.metricType, stockMetricTypes)))
       .groupBy(metrics.metricType, metrics.currency)
-      .all();
+      .execute();
 
     const latestStock = db
       .select({
@@ -170,7 +170,7 @@ export async function GET(request: Request) {
       .groupBy(metrics.accountId, metrics.metricType)
       .as("latest_stock");
 
-    const stockTotals = db
+    const stockTotals = await db
       .select({
         metricType: metrics.metricType,
         total: sql<number>`SUM(${metrics.value})`,
@@ -188,13 +188,13 @@ export async function GET(request: Request) {
       )
       .where(sql`${metrics.projectId} IS NULL`)
       .groupBy(metrics.metricType, metrics.currency)
-      .all();
+      .execute();
 
     return NextResponse.json([...flowTotals, ...stockTotals]);
   }
 
   // Daily metrics
-  const result = db
+  const result = await db
     .select({
       id: metrics.id,
       accountId: metrics.accountId,
@@ -207,18 +207,18 @@ export async function GET(request: Request) {
     .from(metrics)
     .where(and(...conditions))
     .orderBy(desc(metrics.date))
-    .all();
+    .execute();
 
   // Batch account label lookup (single query instead of N+1)
   const resultAccountIds = [...new Set(result.map((r) => r.accountId))];
   const accountLabels: Record<string, string> = {};
 
   if (resultAccountIds.length > 0) {
-    const accountRows = db
+    const accountRows = await db
       .select({ id: accounts.id, label: accounts.label })
       .from(accounts)
       .where(inArray(accounts.id, resultAccountIds))
-      .all();
+      .execute();
     for (const row of accountRows) {
       accountLabels[row.id] = row.label;
     }
