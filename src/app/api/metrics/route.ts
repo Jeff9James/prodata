@@ -73,8 +73,10 @@ export async function GET(request: Request) {
 
   if (accountIds) {
     const ids = accountIds.split(",").filter(Boolean);
-    if (ids.length > 0) {
-      baseConditions.push(inArray(metrics.accountId, ids));
+    // Filter out sentinel values used to indicate "no accounts"
+    const validIds = ids.filter(id => id !== "__none__" && id.trim() !== "");
+    if (validIds.length > 0) {
+      baseConditions.push(inArray(metrics.accountId, validIds));
     }
   } else if (accountId) {
     baseConditions.push(eq(metrics.accountId, accountId));

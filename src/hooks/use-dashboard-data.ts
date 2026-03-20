@@ -472,11 +472,13 @@ export function useDashboardData(): DashboardData {
           }
         }
       }
+      // Always mark as initialized - even if there are no accounts
+      // This ensures effectiveAccountIds is properly set and metrics APIs aren't called unnecessarily
       if (allAccountIds.size > 0) {
         setEnabledAccountIds(allAccountIds);
         setEnabledProjectIds(allProjectIds);
-        initialized.current = true;
       }
+      initialized.current = true;
     }
   }, [integrations, integrationsLoading]);
 

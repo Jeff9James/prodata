@@ -57,8 +57,10 @@ export async function GET(request: Request) {
     const conditions = [];
     if (accountIds) {
         const ids = accountIds.split(",").filter(Boolean);
-        if (ids.length > 0) {
-            conditions.push(inArray(sales.accountId, ids));
+        // Filter out sentinel values used to indicate "no accounts"
+        const validIds = ids.filter(id => id !== "__none__" && id.trim() !== "");
+        if (validIds.length > 0) {
+            conditions.push(inArray(sales.accountId, validIds));
         }
     }
     if (from) conditions.push(gte(sales.timestamp, new Date(from)));
