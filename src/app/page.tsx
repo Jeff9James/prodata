@@ -35,18 +35,7 @@ import { useRevenueByCountry, useRevenueByProduct, useAttribution } from "@/hook
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
 
-  if (authLoading) {
-    return (
-      <div className="flex min-h-[80vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <LoginPrompt />;
-  }
-
+  // Always call useDashboardData - React hooks must be called in the same order every render
   const {
     loading,
     integrationsLoading,
@@ -95,6 +84,18 @@ export default function Dashboard() {
     utcBucketedIntegrations,
     handleSyncComplete,
   } = useDashboardData();
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[80vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPrompt />;
+  }
 
   // New breakdown hooks
   const enabledAccountIdsArray = Array.from(enabledAccountIds);
