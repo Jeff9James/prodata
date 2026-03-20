@@ -33,9 +33,10 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useRevenueByCountry, useRevenueByProduct, useAttribution } from "@/hooks/use-metrics";
 
 export default function Dashboard() {
+  // Auth hook - must be called first
   const { user, loading: authLoading } = useAuth();
 
-  // Always call useDashboardData - React hooks must be called in the same order every render
+  // Dashboard data hook - must be called unconditionally
   const {
     loading,
     integrationsLoading,
@@ -85,19 +86,7 @@ export default function Dashboard() {
     handleSyncComplete,
   } = useDashboardData();
 
-  if (authLoading) {
-    return (
-      <div className="flex min-h-[80vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <LoginPrompt />;
-  }
-
-  // New breakdown hooks
+  // More hooks - must be called unconditionally and in the same order every render
   const enabledAccountIdsArray = Array.from(enabledAccountIds);
   const { data: revenueByCountryData, loading: revenueByCountryLoading } = useRevenueByCountry({
     accountIds: enabledAccountIdsArray.length > 0 ? enabledAccountIdsArray : undefined,
@@ -121,6 +110,20 @@ export default function Dashboard() {
 
   const [backfillErrorOpen, setBackfillErrorOpen] = useState(false);
 
+  // NOW we can do conditional returns - all hooks are called above this line
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[80vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPrompt />;
+  }
+
+  // All subsequent code can use the values from hooks
   // Compute when UTC midnight falls in the user's local time for the tooltip,
   // and which direction a sale near the boundary would shift.
   const { utcResetLabel, utcDayShift } = useMemo(() => {
@@ -498,119 +501,83 @@ export default function Dashboard() {
               const { ranking, label } = getRanking(card.metricKey);
               const canCompare = comparisonAvailability[card.metricKey] ?? true;
               const isStockMetric = stockMetricKeys.has(card.metricKey);
-              const noCompareNote =
-                isStockMetric && !canCompare
-                  ? "Comparison unavailable — snapshot coverage is incomplete."
-                  : undefined;
-              const pending =
-                card.metricKey === "net_revenue"
-                  ? (pendingRangeByMetric.revenue ?? false) || (pendingRangeByMetric.platform_fees ?? false)
-                  : (pendingRangeByMetric[card.metricKey] ?? false);
               return (
                 <MetricCard
                   key={card.metricKey}
                   title={card.title}
                   value={card.current}
-                  previousValue={canCompare ? card.previous || undefined : undefined}
+                  previousValue={card.previous}
                   format={card.format}
                   currency={card.format === "currency" ? currency : undefined}
                   icon={card.icon}
-                  pending={pending}
-                  pendingSourceIds={pendingSourceIdsByMetric[card.metricKey]}
-                  pendingSources={pendingSourcesByMetric[card.metricKey]}
+                  changeDirection={card.changeDirection}
+                  description={canCompare ? comparisonLabel() : undefined}
                   ranking={ranking}
                   rankingLabel={label}
-                  description={
-                    canCompare ? comparisonLabel() : noCompareNote
-                  }
-                  changeDirection={card.changeDirection}
-                  calculation={{
-                    metricKey: card.metricKey,
-                    isStock: stockMetricKeys.has(card.metricKey),
-                    from: rangeFrom,
-                    to: rangeTo,
-                    prevFrom: prevRangeFrom,
-                    prevTo: prevRangeTo,
-                    currentValue: card.current,
-                    previousValue: canCompare ? card.previous || undefined : undefined,
-                    compareEnabled,
-                    compareAvailable: canCompare,
-                  }}
-                  chartData={metricsByDay[card.metricKey]}
-                  chartId={card.metricKey}
-                  breakdownByDate={breakdownByMetricAndDay[card.metricKey]}
-                  pendingByDate={pendingByMetricAndDay[card.metricKey]}
                   loading={metricsLoading}
-                  subtitle={"subtitle" in card ? (card as any).subtitle : undefined}
+                  pending={!!pendingByMetricAndDay[card.metricKey]}
+                  pendingSourceIds={pendingSourceIdsByMetric[card.metricKey]}
+                  pendingSources={pendingSourcesByMetric[card.metricKey]}
                   utcBucketedIntegrations={utcBucketedIntegrations}
                 />
               );
             })}
           </div>
 
-          {/* Live Feed and World Map */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <LiveFeed limit={8} />
-            <WorldMap />
-          </div>
-
-          {/* Customers by Country */}
-          {(customersByCountry.totals.length > 0 || customersByCountryLoading) && (
-            <CustomersByCountryChart
-              data={customersByCountry.totals}
-              bySource={customersByCountry.bySource}
-              accountLabels={customersByCountry.accounts}
-              projectLabels={customersByCountry.projects}
-              accountIntegrationMap={integrations}
-              loading={customersByCountryLoading}
-              accountIds={enabledAccountIdsArray}
-              from={rangeFrom}
-              to={rangeTo}
+          {/* Revenue Chart */}
+          {(hasAccounts || loading) && filteredAccountCount !== 0 && (
+            <RevenueByProductChart
+              data={revenueByProductData?.groupedByName}
+              totalRevenue={revenueByProductData?.totalRevenue}
+              totalOrders={revenueByProductData?.totalOrders}
+              loading={revenueByProductLoading || metricsLoading}
+              currency={currency}
             />
           )}
 
-          {/* Revenue Breakdown Sections */}
           {/* Revenue by Country */}
-          <RevenueByCountryChart
-            data={revenueByCountryData?.countries || []}
-            totalRevenue={revenueByCountryData?.totalRevenue || 0}
-            totalOrders={revenueByCountryData?.totalOrders || 0}
-            loading={revenueByCountryLoading}
-            currency={currency}
-          />
-
-          {/* Two column layout: Attribution + Insights */}
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Attribution Summary */}
-            <AttributionSummary
-              platforms={attributionData?.platforms || []}
-              breakdown={attributionData?.breakdown}
-              totalRevenue={attributionData?.totalRevenue || 0}
-              totalOrders={attributionData?.totalOrders || 0}
-              loading={attributionLoading}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <RevenueByCountryChart
+              data={revenueByCountryData?.countries}
+              totalRevenue={revenueByCountryData?.totalRevenue}
+              totalOrders={revenueByCountryData?.totalOrders}
+              loading={revenueByCountryLoading || metricsLoading}
               currency={currency}
             />
-
-            {/* Insight Cards */}
-            <InsightCards
-              countryData={revenueByCountryData?.countries || []}
-              productData={revenueByProductData?.groupedByName || []}
-              platformData={attributionData?.platforms || []}
-              totalRevenue={revenueByProductData?.totalRevenue || 0}
-              totalOrders={revenueByProductData?.totalOrders || 0}
-              loading={revenueByCountryLoading || revenueByProductLoading || attributionLoading}
-              currency={currency}
+            <CustomersByCountryChart
+              data={customersByCountry?.totals}
+              loading={customersByCountryLoading || metricsLoading}
             />
           </div>
 
-          {/* Revenue by Product */}
-          <RevenueByProductChart
-            data={revenueByProductData?.groupedByName || []}
-            totalRevenue={revenueByProductData?.totalRevenue || 0}
-            totalOrders={revenueByProductData?.totalOrders || 0}
-            loading={revenueByProductLoading}
+          {/* Attribution */}
+          <AttributionSummary
+            platforms={attributionData?.platforms}
+            totalRevenue={attributionData?.totalRevenue}
+            totalOrders={attributionData?.totalOrders}
+            loading={attributionLoading || metricsLoading}
             currency={currency}
           />
+
+          {/* Insights */}
+          <InsightCards
+            countryData={revenueByCountryData?.countries}
+            productData={revenueByProductData?.groupedByName}
+            platformData={attributionData?.platforms}
+            totalRevenue={currentTotals.revenue}
+            totalOrders={currentTotals.salesCount}
+            totalCustomers={currentTotals.newCustomers}
+            loading={metricsLoading}
+            currency={currency}
+          />
+
+          {/* Live Feed */}
+          <LiveFeed />
+
+          {/* World Map */}
+          {customersByCountry?.totals && customersByCountry.totals.length > 0 && (
+            <WorldMap />
+          )}
         </div>
       )}
     </div>
