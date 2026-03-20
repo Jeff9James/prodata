@@ -59,17 +59,22 @@ export async function GET(request: Request) {
 
   const db = getDb();
 
-  // Check if there are no valid account IDs (after filtering out sentinel values)
-  // If so, return empty data early to avoid unnecessary database queries
-  if (accountIds) {
-    const ids = accountIds.split(",").filter(Boolean);
-    const validIds = ids.filter(id => id !== "__none__" && id.trim() !== "");
-    if (validIds.length === 0) {
-      return NextResponse.json({
-        metrics: [],
-        accounts: {},
-      });
-    }
+  // If no accountIds provided or only sentinel values, return empty data early
+  // This handles both new users with no integrations AND queries without filters
+  if (!accountIds || accountIds === "__none__") {
+    return NextResponse.json({
+      metrics: [],
+      accounts: {},
+    });
+  }
+
+  const ids = accountIds.split(",").filter(Boolean);
+  const validIds = ids.filter(id => id !== "__none__" && id.trim() !== "");
+  if (validIds.length === 0) {
+    return NextResponse.json({
+      metrics: [],
+      accounts: {},
+    });
   }
 
   const stockMetricTypes = [
