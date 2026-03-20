@@ -108,22 +108,9 @@ export default function Dashboard() {
     breakdown: "country",
   });
 
+  // Hooks must all be called unconditionally at the top level - before any conditional returns
   const [backfillErrorOpen, setBackfillErrorOpen] = useState(false);
 
-  // NOW we can do conditional returns - all hooks are called above this line
-  if (authLoading) {
-    return (
-      <div className="flex min-h-[80vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <LoginPrompt />;
-  }
-
-  // All subsequent code can use the values from hooks
   // Compute when UTC midnight falls in the user's local time for the tooltip,
   // and which direction a sale near the boundary would shift.
   const { utcResetLabel, utcDayShift } = useMemo(() => {
@@ -325,6 +312,19 @@ export default function Dashboard() {
       ]
       : []),
   ];
+
+  // Conditional returns - AFTER all hooks are called unconditionally
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[80vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPrompt />;
+  }
 
   return (
     <div className="p-6 lg:p-8">
