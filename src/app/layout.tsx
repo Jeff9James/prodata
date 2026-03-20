@@ -1,15 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { AppearanceInit } from "@/components/ui/appearance-init";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
 
 const openRunde = localFont({
   variable: "--font-open-runde",
@@ -23,11 +17,6 @@ const openRunde = localFont({
     { path: "../../public/fonts/open-runde/OpenRunde-Semibold.woff", weight: "600", style: "normal" },
     { path: "../../public/fonts/open-runde/OpenRunde-Bold.woff", weight: "700", style: "normal" },
   ],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
@@ -44,7 +33,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${openRunde.variable} ${geistSans.variable} ${geistMono.variable} antialiased font-sans`}
+        className={`${openRunde.variable} antialiased font-sans`}
       >
         <AppearanceInit />
         <div className="flex h-screen flex-col">

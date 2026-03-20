@@ -1,4 +1,3 @@
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { accounts, metrics, projects, syncLogs, sales } from "../db/schema";
 import type * as schema from "../db/schema";
 import { eq, and, isNull, desc, ne } from "drizzle-orm";
@@ -14,7 +13,7 @@ import {
   startSyncProgress,
 } from "./progress";
 
-type Db = BetterSQLite3Database<typeof schema>;
+type Db = ReturnType<typeof getDb>;
 const RUNNING_SYNC_TTL_MS = 10 * 60 * 1000;
 
 /**
@@ -62,11 +61,12 @@ export async function syncAccount(
   const database = db || (getDb() as unknown as Db);
 
   // Get the account
-  const account = database
+  const accountResult = await database
     .select()
     .from(accounts)
     .where(eq(accounts.id, accountId))
-    .get();
+    .execute();
+  const account = accountResult[0];
 
   if (!account) {
     return { success: false, recordsProcessed: 0, error: "Account not found" };
@@ -92,13 +92,14 @@ export async function syncAccount(
   }
 
   // Also check the DB for stale "running" syncs from a previous process crash.
-  const runningLog = database
+  const runningLogResult = await database
     .select()
     .from(syncLogs)
     .where(and(eq(syncLogs.accountId, accountId), eq(syncLogs.status, "running")))
     .orderBy(desc(syncLogs.startedAt))
     .limit(1)
-    .get();
+    .execute();
+  const runningLog = runningLogResult[0];
 
   if (runningLog) {
     const startedAtMs = Date.parse(runningLog.startedAt.toISOString());
@@ -161,7 +162,7 @@ export async function syncAccount(
       if (options?.from) {
         since = options.from;
       } else if (!options?.fullSync) {
-        const lastSync = database
+        const lastSyncResult = await database
           .select()
           .from(syncLogs)
           .where(
@@ -172,7 +173,8 @@ export async function syncAccount(
           )
           .orderBy(desc(syncLogs.startedAt))
           .limit(1)
-          .get();
+          .execute();
+        const lastSync = lastSyncResult[0];
 
         since = lastSync?.completedAt
           ? new Date(lastSync.completedAt)
@@ -237,7 +239,7 @@ export async function syncAccount(
           recordCount: result.metrics.length,
         });
         const storeT0 = Date.now();
-        await storeMetrics(database, accountId, result.metrics);
+        await storeMetrics(database, accountId, userId, result.metrics);
         updateSyncStep(accountId, "store_metrics", {
           status: "success",
           durationMs: Date.now() - storeT0,
@@ -253,7 +255,7 @@ export async function syncAccount(
           recordCount: result.sales.length,
         });
         const storeSalesT0 = Date.now();
-        storeSales(database, result.sales);
+        await storeSales(database, userId, result.sales);
         updateSyncStep(accountId, "store_sales", {
           status: "success",
           durationMs: Date.now() - storeSalesT0,
@@ -326,7 +328,7 @@ export async function syncAccount(
  * Ensure project rows exist for all referenced projectIds.
  * Uses an in-memory cache to avoid redundant queries within a single sync.
  */
-function ensureProjects(
+async function ensureProjects(
   db: Db,
   accountId: string,
   userId: string,
@@ -346,7 +348,7 @@ function ensureProjects(
 
   // Check which projects already exist (single query)
   const existingIds = new Set(
-    (await db.select({ id: projects.id }).from(projects).execute()).map((p) => p.id)
+    (await db.select().from(projects).execute()).map((p) => p.id)
   );
 
   // Insert only the new ones
@@ -385,13 +387,14 @@ function ensureProjects(
 /**
  * Process a batch of metrics inside a single transaction.
  */
-function storeMetricsBatch(
+async function storeMetricsBatch(
   db: Db,
   accountId: string,
+  userId: string,
   batch: NormalizedMetric[]
-): void {
-  db.transaction((tx) => {
-    const now = new Date().toISOString();
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const now = new Date();
 
     // Batch-ensure all referenced projects first (single pass)
     await ensureProjects(tx as unknown as Db, accountId, userId, batch);
@@ -427,19 +430,20 @@ function storeMetricsBatch(
         } else {
           pendingDeleteConditions.push(isNull(metrics.projectId));
         }
-        tx.delete(metrics)
+        await tx.delete(metrics)
           .where(and(...pendingDeleteConditions))
-          .run();
+          .execute();
       }
 
-      const existing = tx
-        .select({ id: metrics.id })
+      const existingResult = await tx
+        .select()
         .from(metrics)
         .where(and(...conditions))
-        .get();
+        .execute();
+      const existing = existingResult[0];
 
       if (existing) {
-        tx.update(metrics)
+        await tx.update(metrics)
           .set({
             value: metric.value,
             currency: metric.currency || null,
@@ -447,21 +451,22 @@ function storeMetricsBatch(
             metadata: metadataJson,
           })
           .where(eq(metrics.id, existing.id))
-          .run();
+          .execute();
 
         // Clean up any legacy duplicates for the same key.
-        tx.delete(metrics)
+        await tx.delete(metrics)
           .where(
             and(
               ...conditions,
               ne(metrics.id, existing.id)
             )
           )
-          .run();
+          .execute();
       } else {
-        tx.insert(metrics)
+        await tx.insert(metrics)
           .values({
             id: generateSecureId(),
+            userId,
             accountId,
             projectId: resolvedProjectId,
             metricType: metric.metricType,
@@ -471,25 +476,26 @@ function storeMetricsBatch(
             metadata: metadataJson,
             createdAt: now,
           })
-          .run();
+          .execute();
       }
     }
   });
 }
 
-function storeSales(db: Db, salesRecords: any[]): void {
-  db.transaction((tx) => {
+async function storeSales(db: Db, userId: string, salesRecords: any[]): Promise<void> {
+  await db.transaction(async (tx) => {
     for (const sale of salesRecords) {
       // Check if sale already exists
-      const existing = tx
-        .select({ id: sales.id })
+      const existingResult = await tx
+        .select()
         .from(sales)
         .where(eq(sales.id, sale.id))
-        .get();
+        .execute();
+      const existing = existingResult[0];
 
       if (existing) {
         // Update existing sale
-        tx.update(sales)
+        await tx.update(sales)
           .set({
             productName: sale.productName,
             productId: sale.productId,
@@ -501,12 +507,15 @@ function storeSales(db: Db, salesRecords: any[]): void {
             metadata: sale.metadata,
           })
           .where(eq(sales.id, sale.id))
-          .run();
+          .execute();
       } else {
         // Insert new sale
-        tx.insert(sales)
-          .values(sale)
-          .run();
+        await tx.insert(sales)
+          .values({
+            ...sale,
+            userId,
+          })
+          .execute();
       }
     }
   });
@@ -532,6 +541,7 @@ const SNAPSHOT_METRIC_TYPES = new Set([
 async function storeMetrics(
   db: Db,
   accountId: string,
+  userId: string,
   newMetrics: NormalizedMetric[]
 ): Promise<void> {
   // Pre-delete stale snapshot data so old dates don't accumulate.
@@ -541,13 +551,13 @@ async function storeMetrics(
       .filter((t) => SNAPSHOT_METRIC_TYPES.has(t))
   );
   for (const mt of snapshotTypes) {
-    db.delete(metrics)
+    await db.delete(metrics)
       .where(and(eq(metrics.accountId, accountId), eq(metrics.metricType, mt)))
-      .run();
+      .execute();
   }
 
   for (let i = 0; i < newMetrics.length; i += STORE_BATCH_SIZE) {
-    storeMetricsBatch(db, accountId, newMetrics.slice(i, i + STORE_BATCH_SIZE));
+    await storeMetricsBatch(db, accountId, userId, newMetrics.slice(i, i + STORE_BATCH_SIZE));
     // Yield to the event loop so progress poll requests can be served
     if (i + STORE_BATCH_SIZE < newMetrics.length) {
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -576,11 +586,12 @@ export async function syncAllAccounts(
 }> {
   const database = db || (getDb() as unknown as Db);
 
-  const activeAccounts = database
+  const activeAccountsResult = await database
     .select()
     .from(accounts)
     .where(eq(accounts.isActive, true))
-    .all();
+    .execute();
+  const activeAccounts = activeAccountsResult;
 
   const results = [];
 
@@ -599,14 +610,15 @@ export async function syncAllAccounts(
 /**
  * Get the sync status for an account (last sync log).
  */
-export function getAccountSyncStatus(accountId: string, db?: Db) {
+export async function getAccountSyncStatus(accountId: string, db?: Db) {
   const database = db || (getDb() as unknown as Db);
 
-  return database
+  const result = await database
     .select()
     .from(syncLogs)
     .where(eq(syncLogs.accountId, accountId))
     .orderBy(desc(syncLogs.startedAt))
     .limit(1)
-    .get();
+    .execute();
+  return result[0];
 }
