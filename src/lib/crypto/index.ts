@@ -8,22 +8,54 @@ const LEGACY_IV_LENGTH = 16; // Previous IV length, kept for backward compatibil
 const AUTH_TAG_LENGTH = 16;
 const KEY_LENGTH = 32; // 256 bits
 
+// Environment variable for encryption key (production)
+// Format: 64 hex characters (32 bytes)
+const ENCRYPTION_KEY_ENV = process.env.ENCRYPTION_KEY;
+
 const KEY_DIR = path.join(process.cwd(), ".ohmydashboard");
 const KEY_PATH = path.join(KEY_DIR, ".encryption_key");
 
 /**
  * Get or create the encryption key.
  *
- * The key is a 256-bit random value stored in `.ohmydashboard/.encryption_key`.
- * This file should never be committed to version control.
+ * Priority:
+ * 1. keyOverride (for testing)
+ * 2. ENCRYPTION_KEY environment variable (production on Vercel)
+ * 3. File-based key in .ohmydashboard/.encryption_key (local development)
  *
- * For testing, a key can be passed directly.
+ * For production (Vercel), set ENCRYPTION_KEY environment variable to a 64-character
+ * hex string (32 bytes). You can generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
  */
 export function getEncryptionKey(keyOverride?: Buffer): Buffer {
   if (keyOverride) return keyOverride;
 
+  // Priority 1: Environment variable (for Vercel/production)
+  if (ENCRYPTION_KEY_ENV) {
+    const key = Buffer.from(ENCRYPTION_KEY_ENV, "hex");
+    if (key.length !== KEY_LENGTH) {
+      throw new Error(
+        `ENCRYPTION_KEY environment variable must be ${KEY_LENGTH * 2} hex characters (${KEY_LENGTH} bytes). ` +
+        `Current length: ${key.length}`
+      );
+    }
+    return key;
+  }
+
+  // Priority 2: File-based key (local development only)
+  // In production (Vercel), this will fail because the filesystem is read-only
   if (!fs.existsSync(KEY_DIR)) {
-    fs.mkdirSync(KEY_DIR, { recursive: true });
+    try {
+      fs.mkdirSync(KEY_DIR, { recursive: true });
+    } catch {
+      // Directory creation failed - likely running in a read-only filesystem (Vercel)
+      // Fall back to generating a temporary key (won't persist across requests)
+      console.warn(
+        "[CRYPTO] Unable to create .ohmydashboard directory. " +
+        "For production, set ENCRYPTION_KEY environment variable. " +
+        "Using temporary key - credentials will not persist across serverless function invocations!"
+      );
+      return crypto.randomBytes(KEY_LENGTH);
+    }
   }
 
   // Try to read an existing key first
@@ -54,7 +86,13 @@ export function getEncryptionKey(keyOverride?: Buffer): Buffer {
       if (stored.length === KEY_LENGTH) return stored;
       throw new Error("Encryption key file created by concurrent process has invalid length");
     }
-    throw err;
+    // If we can't write the file (e.g., read-only filesystem), generate a temporary key
+    console.warn(
+      "[CRYPTO] Unable to write encryption key file. " +
+      "For production, set ENCRYPTION_KEY environment variable. " +
+      "Using temporary key - credentials will not persist across serverless function invocations!"
+    );
+    return key;
   }
   return key;
 }
