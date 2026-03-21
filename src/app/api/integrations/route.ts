@@ -137,9 +137,19 @@ export async function POST(request: Request) {
   }
 
   // Validate credentials against the external service
-  const isValid = await integration.fetcher.validateCredentials(
-    credentials as Record<string, string>
-  );
+  let isValid = false;
+  try {
+    isValid = await integration.fetcher.validateCredentials(
+      credentials as Record<string, string>
+    );
+  } catch (err) {
+    console.error("Credential validation error:", err);
+    return NextResponse.json(
+      { error: "Failed to validate credentials. Please try again." },
+      { status: 500 }
+    );
+  }
+
   if (!isValid) {
     return NextResponse.json(
       {
@@ -151,11 +161,29 @@ export async function POST(request: Request) {
   }
 
   // Get user ID from session
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  let supabase;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch (err) {
+    console.error("Supabase client creation error:", err);
+    return NextResponse.json(
+      { error: "Server configuration error." },
+      { status: 500 }
+    );
+  }
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError) {
+    console.error("User authentication error:", userError);
+    return NextResponse.json(
+      { error: "Authentication error: " + userError.message },
+      { status: 401 }
+    );
+  }
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized - no user session found" }, { status: 401 });
   }
 
   const db = getDb();

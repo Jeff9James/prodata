@@ -29,7 +29,8 @@ export function validateCsrf(request: Request): NextResponse | null {
   }
 
   // Check custom header first (simplest and strongest protection)
-  if (request.headers.get(CUSTOM_HEADER) === CUSTOM_HEADER_VALUE) {
+  const customHeader = request.headers.get(CUSTOM_HEADER);
+  if (customHeader === CUSTOM_HEADER_VALUE) {
     return null;
   }
 
@@ -40,20 +41,31 @@ export function validateCsrf(request: Request): NextResponse | null {
     .map((h) => h.trim().toLowerCase())
     .filter(Boolean);
 
+  // Debug log in development
+  if (process.env.NODE_ENV === "development") {
+    console.log("[CSRF] Request:", method, request.url);
+    console.log("[CSRF] Custom header:", customHeader);
+    console.log("[CSRF] Allowed origins:", allowedOrigins);
+  }
+
   // Check Origin header
   const origin = request.headers.get("origin");
   if (origin) {
     try {
       const originUrl = new URL(origin);
-      if (allowedOrigins.includes(originUrl.hostname.toLowerCase())) {
+      const originHostname = originUrl.hostname.toLowerCase();
+      if (allowedOrigins.includes(originHostname)) {
         return null;
       }
+      // Debug log for rejected origins
+      console.log("[CSRF] Rejected origin:", origin, "not in", allowedOrigins);
     } catch {
       // Invalid origin URL, reject
+      console.log("[CSRF] Invalid origin format:", origin);
     }
 
     return NextResponse.json(
-      { error: "Forbidden: cross-origin request blocked" },
+      { error: "Forbidden: cross-origin request blocked", origin, allowedOrigins },
       { status: 403 }
     );
   }
@@ -63,34 +75,24 @@ export function validateCsrf(request: Request): NextResponse | null {
   if (referer) {
     try {
       const refererUrl = new URL(referer);
-      if (allowedOrigins.includes(refererUrl.hostname.toLowerCase())) {
+      const refererHostname = refererUrl.hostname.toLowerCase();
+      if (allowedOrigins.includes(refererHostname)) {
         return null;
       }
+      console.log("[CSRF] Rejected referer:", referer, "not in", allowedOrigins);
     } catch {
       // Invalid referer URL, reject
+      console.log("[CSRF] Invalid referer format:", referer);
     }
 
     return NextResponse.json(
-      { error: "Forbidden: cross-origin request blocked" },
+      { error: "Forbidden: cross-origin request blocked", referer, allowedOrigins },
       { status: 403 }
     );
   }
 
-  // No Origin or Referer header at all — this can happen with:
-  // - Server-to-server requests (fine for local use)
-  // - Some browser privacy settings that strip headers
-  // - Direct API tools like curl
-  //
-  // Without Origin/Referer, we MUST require the custom header as a fallback.
-  // Allowing requests with none of the three signals would let an attacker
-  // craft a cross-origin form POST that bypasses CSRF protection entirely
-  // (some browsers strip Origin/Referer on cross-scheme or privacy-mode
-  // navigations, and HTML forms with enctype="text/plain" can avoid
-  // triggering CORS preflight).
-  //
-  // Note on port checking: we intentionally allow any port on localhost/127.0.0.1
-  // since the app's port is user-configurable. This means other localhost services
-  // can make cross-origin requests, which is an accepted trade-off for a local app.
+  // No Origin or Referer header at all
+  console.log("[CSRF] No origin or referer, custom header was:", customHeader);
   return NextResponse.json(
     { error: "Forbidden: missing origin verification. Include the x-omd-request header." },
     { status: 403 }
