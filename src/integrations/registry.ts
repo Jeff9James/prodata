@@ -70,6 +70,7 @@ export async function loadAllIntegrations(): Promise<void> {
   await import("./gumroad");
   await import("./revenuecat");
   await import("./amazon");
+  await import("./dodo");
 }
 
 /**
