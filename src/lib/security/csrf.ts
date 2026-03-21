@@ -33,15 +33,19 @@ export function validateCsrf(request: Request): NextResponse | null {
     return null;
   }
 
+  // Get allowed hostnames from environment variable (comma-separated for multiple domains)
+  // Format: "localhost,127.0.0.1,your-app.vercel.app,your-domain.com"
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || "localhost,127.0.0.1")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+
   // Check Origin header
   const origin = request.headers.get("origin");
   if (origin) {
     try {
       const originUrl = new URL(origin);
-      if (
-        originUrl.hostname === "localhost" ||
-        originUrl.hostname === "127.0.0.1"
-      ) {
+      if (allowedOrigins.includes(originUrl.hostname.toLowerCase())) {
         return null;
       }
     } catch {
@@ -59,10 +63,7 @@ export function validateCsrf(request: Request): NextResponse | null {
   if (referer) {
     try {
       const refererUrl = new URL(referer);
-      if (
-        refererUrl.hostname === "localhost" ||
-        refererUrl.hostname === "127.0.0.1"
-      ) {
+      if (allowedOrigins.includes(refererUrl.hostname.toLowerCase())) {
         return null;
       }
     } catch {
