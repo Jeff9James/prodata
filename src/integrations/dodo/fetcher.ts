@@ -545,12 +545,32 @@ export const dodoFetcher: DataFetcher = {
         try {
             const apiKey = credentials.api_key;
             const environment = credentials.environment;
+
+            // Determine environment for logging
+            const envLabel = environment?.toLowerCase() === "test_mode" ? "test" : "live";
+
             // Make a simple API call to verify the key works
-            await dodoGet<{ items: unknown[] }>("/payments", apiKey, environment, {
-                page_size: "1",
-            });
+            await dodoGet<{ items?: unknown[]; has_next_page?: boolean }>(
+                "/payments",
+                apiKey,
+                environment,
+                { page_size: "1" }
+            );
+            console.log(`[Dodo] Credentials validated successfully for ${envLabel} environment`);
             return true;
-        } catch {
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            const envLabel = credentials.environment?.toLowerCase() === "test_mode" ? "test" : "live";
+
+            // Log detailed error for debugging
+            console.error(`[Dodo] Credential validation failed for ${envLabel} environment:`, message);
+
+            // Provide more helpful context
+            if (message.includes("401") || message.includes("Unauthorized")) {
+                console.error(`[Dodo] The API key may be invalid or belong to the wrong environment. ` +
+                    `For ${envLabel} mode, ensure you're using a ${envLabel} environment API key from the Dodo dashboard.`);
+            }
+
             return false;
         }
     },
