@@ -114,7 +114,7 @@ export async function GET(request: Request) {
     if (isStockMetric) {
       const allRows = await db
         .select({
-          country: sql<string>`json_extract(${metrics.metadata}, '$.country')`.as("country"),
+          country: sql<string>`(${metrics.metadata}->>'country')::text`.as("country"),
           value: sql<number>`CAST(${metrics.value} AS INTEGER)`.as("value"),
           accountId: metrics.accountId,
           projectId: sql<string | null>`${metrics.projectId}`.as("projectId"),
@@ -149,7 +149,7 @@ export async function GET(request: Request) {
     } else {
       rawRows = await db
         .select({
-          country: sql<string>`json_extract(${metrics.metadata}, '$.country')`.as("country"),
+          country: sql<string>`(${metrics.metadata}->>'country')::text`.as("country"),
           count: sql<number>`CAST(SUM(${metrics.value}) AS INTEGER)`.as("count"),
           accountId: metrics.accountId,
           projectId: sql<string | null>`${metrics.projectId}`.as("projectId"),
@@ -157,7 +157,7 @@ export async function GET(request: Request) {
         .from(metrics)
         .where(and(...conditions))
         .groupBy(
-          sql`json_extract(${metrics.metadata}, '$.country')`,
+          sql`(${metrics.metadata}->>'country')::text`,
           metrics.accountId,
           metrics.projectId
         )
