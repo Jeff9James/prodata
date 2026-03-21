@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { sales, accounts, projects } from "@/lib/db/schema";
 import { eq, desc, inArray, sql, and } from "drizzle-orm";
 import { validateAccountId } from "@/lib/security";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
  * GET /api/sales
@@ -14,6 +15,14 @@ import { validateAccountId } from "@/lib/security";
  */
 export async function GET(request: Request) {
     try {
+        // Get user ID from session
+        const supabase = await createSupabaseServerClient();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const limit = parseInt(searchParams.get("limit") || "50");
         const accountIds = searchParams.get("accountIds");
@@ -35,6 +44,20 @@ export async function GET(request: Request) {
         }
 
         const db = getDb();
+
+        // Verify that all requested account IDs belong to the current user
+        if (accountIds) {
+            const ids = accountIds.split(",").filter(Boolean);
+            if (ids.length > 0) {
+                const userAccounts = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.userId, user.id)).execute();
+                const userAccountIds = new Set(userAccounts.map(a => a.id));
+                for (const id of ids) {
+                    if (!userAccountIds.has(id)) {
+                        return NextResponse.json({ error: "Unauthorized - account not found or does not belong to user" }, { status: 403 });
+                    }
+                }
+            }
+        }
 
         // Build filter conditions
         const conditions = [];

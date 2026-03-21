@@ -3,6 +3,10 @@ import { syncAccount, syncAllAccounts, getAccountSyncStatus } from "@/lib/sync/e
 import { getSyncProgress } from "@/lib/sync/progress";
 import { loadAllIntegrations } from "@/integrations/registry";
 import { validateCsrf, validateAccountId } from "@/lib/security";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db";
+import { accounts } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 let loaded = false;
 async function ensureLoaded() {
@@ -129,6 +133,14 @@ export async function GET(request: Request) {
   const csrfError = validateCsrf(request);
   if (csrfError) return csrfError;
 
+  // Get user ID from session
+  const supabase = await createSupabaseServerClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   await ensureLoaded();
 
   const { searchParams } = new URL(request.url);
@@ -148,6 +160,13 @@ export async function GET(request: Request) {
       { error: accountIdError.message },
       { status: 400 }
     );
+  }
+
+  // Verify the account belongs to the user
+  const db = getDb();
+  const userAccount = await db.select().from(accounts).where(eq(accounts.id, accountId)).execute();
+  if (userAccount.length === 0 || userAccount[0].userId !== user.id) {
+    return NextResponse.json({ error: "Unauthorized - account not found or does not belong to user" }, { status: 403 });
   }
 
   if (wantProgress) {

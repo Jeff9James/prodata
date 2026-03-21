@@ -13,7 +13,7 @@ import {
   validateIntegrationId,
   validateCredentials,
 } from "@/lib/security";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // Ensure integrations are loaded
@@ -32,11 +32,20 @@ async function ensureLoaded() {
 export async function GET() {
   await ensureLoaded();
 
+  // Get user ID from session
+  const supabase = await createSupabaseServerClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const db = getDb();
   const allIntegrations = getAllIntegrations();
-  const allAccounts = await db.select().from(accounts).execute();
-  const allProjects = await db.select().from(projects).execute();
-  const allSyncLogs = await db.select().from(syncLogs).orderBy(desc(syncLogs.startedAt)).execute();
+  const allAccounts = await db.select().from(accounts).where(eq(accounts.userId, user.id)).execute();
+  const allAccountIds = new Set(allAccounts.map(a => a.id));
+  const allProjects = await db.select().from(projects).where(eq(projects.userId, user.id)).execute();
+  const allSyncLogs = await db.select().from(syncLogs).where(eq(syncLogs.userId, user.id)).orderBy(desc(syncLogs.startedAt)).execute();
 
   const latestSyncByAccount = new Map<string, (typeof syncLogs.$inferSelect)>();
   for (const log of allSyncLogs) {

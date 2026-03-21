@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { metrics, accounts } from "@/lib/db/schema";
 import { eq, and, gte, lte, sql, desc, inArray, notInArray } from "drizzle-orm";
 import { validateDateString, validateAccountId } from "@/lib/security";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const VALID_AGGREGATIONS = ["daily", "total"] as const;
 
@@ -19,6 +20,14 @@ const VALID_AGGREGATIONS = ["daily", "total"] as const;
  * - aggregation: "daily" (default) | "total"
  */
 export async function GET(request: Request) {
+  // Get user ID from session
+  const supabase = await createSupabaseServerClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const accountId = searchParams.get("accountId");
   const accountIds = searchParams.get("accountIds");
@@ -75,6 +84,15 @@ export async function GET(request: Request) {
       metrics: [],
       accounts: {},
     });
+  }
+
+  // Verify that all requested account IDs belong to the current user
+  const userAccounts = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.userId, user.id)).execute();
+  const userAccountIds = new Set(userAccounts.map(a => a.id));
+  for (const id of validIds) {
+    if (!userAccountIds.has(id)) {
+      return NextResponse.json({ error: "Unauthorized - account not found or does not belong to user" }, { status: 403 });
+    }
   }
 
   const stockMetricTypes = [

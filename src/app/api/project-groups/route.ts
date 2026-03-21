@@ -31,12 +31,21 @@ interface MemberInput {
  * ]
  */
 export async function GET() {
+  // Get user ID from session
+  const supabase = await createSupabaseServerClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const db = getDb();
 
-  const allGroups = await db.select().from(projectGroups).execute();
-  const allMembers = await db.select().from(projectGroupMembers).execute();
-  const allAccounts = await db.select().from(accounts).execute();
-  const allProjects = await db.select().from(projects).execute();
+  const allGroups = await db.select().from(projectGroups).where(eq(projectGroups.userId, user.id)).execute();
+  const allMembers = await db.select().from(projectGroupMembers).where(eq(projectGroupMembers.userId, user.id)).execute();
+  const allAccounts = await db.select().from(accounts).where(eq(accounts.userId, user.id)).execute();
+  const accountIds = new Set(allAccounts.map(a => a.id));
+  const allProjects = await db.select().from(projects).where(eq(projects.userId, user.id)).execute();
 
   const accountMap = new Map(allAccounts.map((a) => [a.id, a]));
   const projectMap = new Map(allProjects.map((p) => [p.id, p]));

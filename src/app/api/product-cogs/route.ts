@@ -51,6 +51,14 @@ function validateCogsData(data: Record<string, unknown>): { errors: string[]; va
 
 export async function GET(request: Request) {
     try {
+        // Get user ID from session
+        const supabase = await createSupabaseServerClient();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const platform = searchParams.get("platform");
         const productId = searchParams.get("productId");
@@ -72,13 +80,14 @@ export async function GET(request: Request) {
                 .from(productCogs)
                 .where(
                     and(
+                        eq(productCogs.userId, user.id),
                         eq(productCogs.platform, platform),
                         eq(productCogs.productId, productId)
                     )
                 )
                 .execute();
         } else {
-            results = await db.select().from(productCogs).execute();
+            results = await db.select().from(productCogs).where(eq(productCogs.userId, user.id)).execute();
         }
 
         return NextResponse.json(results);

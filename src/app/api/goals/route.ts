@@ -70,6 +70,14 @@ function validateGoalData(data: Record<string, unknown>): { errors: string[]; va
 
 export async function GET(request: Request) {
     try {
+        // Get user ID from session
+        const supabase = await createSupabaseServerClient();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const activeOnly = searchParams.get("activeOnly") === "true";
         const metricType = searchParams.get("metricType");
@@ -84,8 +92,8 @@ export async function GET(request: Request) {
 
         const db = getDb();
 
-        // Build conditions properly
-        const conditions = [];
+        // Build conditions properly - always filter by userId
+        const conditions = [eq(goals.userId, user.id)];
         if (activeOnly) {
             conditions.push(eq(goals.isActive, true));
         }
@@ -93,9 +101,7 @@ export async function GET(request: Request) {
             conditions.push(eq(goals.metricType, metricType));
         }
 
-        const results = conditions.length > 0
-            ? db.select().from(goals).where(and(...conditions)).execute()
-            : db.select().from(goals).execute();
+        const results = db.select().from(goals).where(and(...conditions)).execute();
 
         return NextResponse.json(results);
     } catch (error) {
