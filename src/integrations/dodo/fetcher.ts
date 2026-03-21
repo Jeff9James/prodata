@@ -9,7 +9,14 @@ import type {
 
 // ─── Dodo API types ──────────────────────────────────────────────────────
 
-const DODO_API_BASE = "https://live.dodopayments.com";
+const DODO_LIVE_BASE = "https://live.dodopayments.com";
+const DODO_TEST_BASE = "https://test.dodopayments.com";
+
+function getBaseUrl(environment?: string): string {
+    return environment?.toLowerCase() === "test_mode"
+        ? DODO_TEST_BASE
+        : DODO_LIVE_BASE;
+}
 
 interface DodoPayment {
     payment_id: string;
@@ -72,9 +79,11 @@ interface CustomerListResponse {
 async function dodoGet<T>(
     endpoint: string,
     apiKey: string,
+    environment?: string,
     params?: Record<string, string>
 ): Promise<T> {
-    const url = new URL(`${DODO_API_BASE}${endpoint}`);
+    const baseUrl = getBaseUrl(environment);
+    const url = new URL(`${baseUrl}${endpoint}`);
     if (params) {
         for (const [key, val] of Object.entries(params)) {
             url.searchParams.set(key, val);
@@ -85,7 +94,7 @@ async function dodoGet<T>(
         method: "GET",
         headers: {
             Accept: "application/json",
-            Authorization: `Bearer ${apiKey}`,
+            "x-dodo-payments-api-key": apiKey,
         },
     });
 
@@ -104,6 +113,7 @@ async function dodoGet<T>(
  */
 async function fetchPayments(
     apiKey: string,
+    environment: string | undefined,
     since: Date
 ): Promise<DodoPayment[]> {
     const payments: DodoPayment[] = [];
@@ -115,6 +125,7 @@ async function fetchPayments(
         const data = await dodoGet<PaymentListResponse>(
             "/payments",
             apiKey,
+            environment,
             {
                 created_at_gte: since.toISOString(),
                 page_number: String(pageNumber),
@@ -140,7 +151,8 @@ async function fetchPayments(
  * Fetch active subscriptions.
  */
 async function fetchActiveSubscriptions(
-    apiKey: string
+    apiKey: string,
+    environment: string | undefined
 ): Promise<DodoSubscription[]> {
     const subscriptions: DodoSubscription[] = [];
     let pageNumber = 0;
@@ -151,6 +163,7 @@ async function fetchActiveSubscriptions(
         const data = await dodoGet<SubscriptionListResponse>(
             "/subscriptions",
             apiKey,
+            environment,
             {
                 page_number: String(pageNumber),
                 page_size: String(pageSize),
@@ -159,9 +172,7 @@ async function fetchActiveSubscriptions(
 
         if (data.items) {
             // Filter for active subscriptions only
-            const activeSubs = data.items.filter(
-                (sub) => sub.status === "active"
-            );
+            const activeSubs = data.items.filter((sub) => sub.status === "active");
             subscriptions.push(...activeSubs);
         }
 
@@ -180,6 +191,7 @@ async function fetchActiveSubscriptions(
  */
 async function fetchNewCustomers(
     apiKey: string,
+    environment: string | undefined,
     since: Date
 ): Promise<DodoCustomer[]> {
     const customers: DodoCustomer[] = [];
@@ -191,6 +203,7 @@ async function fetchNewCustomers(
         const data = await dodoGet<CustomerListResponse>(
             "/customers",
             apiKey,
+            environment,
             {
                 created_at_gte: since.toISOString(),
                 page_number: String(pageNumber),
@@ -218,9 +231,7 @@ async function fetchNewCustomers(
  * Group payments by day and compute daily revenue.
  * Classifies each payment as subscription vs one-time based on subscription_id.
  */
-function computeDailyRevenue(
-    payments: DodoPayment[]
-): NormalizedMetric[] {
+function computeDailyRevenue(payments: DodoPayment[]): NormalizedMetric[] {
     const dailyMap = new Map<
         string,
         {
@@ -388,6 +399,7 @@ export const dodoFetcher: DataFetcher = {
         reportStep?: (step: SyncStep) => void
     ): Promise<SyncResult> {
         const apiKey = account.credentials.api_key;
+        const environment = account.credentials.environment;
         const syncSince = since || subDays(startOfDay(new Date()), 30);
         const today = format(new Date(), "yyyy-MM-dd");
 
@@ -405,7 +417,7 @@ export const dodoFetcher: DataFetcher = {
             status: "running",
         });
         try {
-            payments = await fetchPayments(apiKey, syncSince);
+            payments = await fetchPayments(apiKey, environment, syncSince);
             const revenueMetrics = computeDailyRevenue(payments);
             allMetrics.push(...revenueMetrics);
             totalRecords += payments.length;
@@ -440,7 +452,7 @@ export const dodoFetcher: DataFetcher = {
             status: "running",
         });
         try {
-            subscriptions = await fetchActiveSubscriptions(apiKey);
+            subscriptions = await fetchActiveSubscriptions(apiKey, environment);
             const subscriptionMetrics = computeMRR(subscriptions, today);
             allMetrics.push(...subscriptionMetrics);
             totalRecords += subscriptions.length;
@@ -460,7 +472,10 @@ export const dodoFetcher: DataFetcher = {
                 label: "Fetch subscriptions & MRR",
                 status: "error",
                 durationMs: Date.now() - t0,
-                error: error instanceof Error ? error.message : "Failed to fetch subscriptions",
+                error:
+                    error instanceof Error
+                        ? error.message
+                        : "Failed to fetch subscriptions",
             };
             steps.push(step);
             reportStep?.(step);
@@ -474,7 +489,7 @@ export const dodoFetcher: DataFetcher = {
             status: "running",
         });
         try {
-            const customers = await fetchNewCustomers(apiKey, syncSince);
+            const customers = await fetchNewCustomers(apiKey, environment, syncSince);
             const customerMetrics = computeNewCustomers(customers);
             allMetrics.push(...customerMetrics);
             totalRecords += customers.length;
@@ -494,7 +509,10 @@ export const dodoFetcher: DataFetcher = {
                 label: "Fetch new customers",
                 status: "error",
                 durationMs: Date.now() - t0,
-                error: error instanceof Error ? error.message : "Failed to fetch customers",
+                error:
+                    error instanceof Error
+                        ? error.message
+                        : "Failed to fetch customers",
             };
             steps.push(step);
             reportStep?.(step);
@@ -526,8 +544,9 @@ export const dodoFetcher: DataFetcher = {
     ): Promise<boolean> {
         try {
             const apiKey = credentials.api_key;
+            const environment = credentials.environment;
             // Make a simple API call to verify the key works
-            await dodoGet<{ items: unknown[] }>("/payments", apiKey, {
+            await dodoGet<{ items: unknown[] }>("/payments", apiKey, environment, {
                 page_size: "1",
             });
             return true;
