@@ -101,7 +101,9 @@ export function CogsManager({ products = [], onCogsChange }: CogsManagerProps) {
     };
 
     // Calculate total costs and profit from configured COGS
-    const totalConfiguredCogs = cogs.reduce((sum, cog) => {
+    // Ensure cogs is always an array
+    const safeCogs = Array.isArray(cogs) ? cogs : [];
+    const totalConfiguredCogs = safeCogs.reduce((sum, cog) => {
         // This is the base cost - actual profit calculation needs sales data
         return sum + cog.cogsAmount;
     }, 0);
@@ -247,7 +249,7 @@ export function CogsManager({ products = [], onCogsChange }: CogsManagerProps) {
                 </Dialog>
             </CardHeader>
             <CardContent>
-                {cogs.length === 0 ? (
+                {safeCogs.length === 0 ? (
                     <div className="text-center py-6 text-muted-foreground">
                         <p className="text-sm">No product costs configured yet.</p>
                         <p className="text-xs mt-1">
@@ -256,7 +258,7 @@ export function CogsManager({ products = [], onCogsChange }: CogsManagerProps) {
                     </div>
                 ) : (
                     <div className="space-y-2">
-                        {cogs.map((cog) => (
+                        {safeCogs.map((cog) => (
                             <div
                                 key={cog.id}
                                 className="flex items-center justify-between p-3 rounded-lg border bg-card"

@@ -104,7 +104,10 @@ export function useGoals(): UseGoalsResult {
         if (!response.ok) {
             throw new Error("Failed to delete goal");
         }
-        setGoals((prev) => prev.filter((g) => g.id !== id));
+        setGoals((prev) => {
+            const safePrev = Array.isArray(prev) ? prev : [];
+            return safePrev.filter((g) => g.id !== id);
+        });
     }, []);
 
     const updateGoalProgress = useCallback(
@@ -116,17 +119,20 @@ export function useGoals(): UseGoalsResult {
 
     const getGoalsByMetric = useCallback(
         (metricType: string) => {
-            return goals.filter((g) => g.metricType === metricType);
+            const safeGoals = Array.isArray(goals) ? goals : [];
+            return safeGoals.filter((g) => g.metricType === metricType);
         },
         [goals]
     );
 
     const getActiveGoals = useCallback(() => {
-        return goals.filter((g) => g.isActive);
+        const safeGoals = Array.isArray(goals) ? goals : [];
+        return safeGoals.filter((g) => g.isActive);
     }, [goals]);
 
     const getGoalsNeedingAlert = useCallback(() => {
-        return goals.filter((g) => {
+        const safeGoals = Array.isArray(goals) ? goals : [];
+        return safeGoals.filter((g) => {
             if (!g.alertEnabled || !g.isActive) return false;
             const percentComplete = (g.currentValue / g.targetValue) * 100;
             return percentComplete >= g.alertThreshold;

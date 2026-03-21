@@ -63,15 +63,16 @@ export function useProductCogs(): UseProductCogsResult {
             }
             const newCog = await response.json();
             setCogs((prev) => {
-                const existing = prev.findIndex(
+                const safePrev = Array.isArray(prev) ? prev : [];
+                const existing = safePrev.findIndex(
                     (c) => c.platform === cog.platform && c.productId === cog.productId
                 );
                 if (existing >= 0) {
-                    const updated = [...prev];
+                    const updated = [...safePrev];
                     updated[existing] = newCog;
                     return updated;
                 }
-                return [...prev, newCog];
+                return [...safePrev, newCog];
             });
         },
         []
@@ -88,9 +89,10 @@ export function useProductCogs(): UseProductCogsResult {
                 throw new Error("Failed to update COGS entry");
             }
             const updatedCog = await response.json();
-            setCogs((prev) =>
-                prev.map((c) => (c.id === id ? updatedCog : c))
-            );
+            setCogs((prev) => {
+                const safePrev = Array.isArray(prev) ? prev : [];
+                return safePrev.map((c) => (c.id === id ? updatedCog : c));
+            });
         },
         []
     );
@@ -102,7 +104,11 @@ export function useProductCogs(): UseProductCogsResult {
         if (!response.ok) {
             throw new Error("Failed to delete COGS entry");
         }
-        setCogs((prev) => prev.filter((c) => c.id !== id));
+        // Ensure prev is always an array before filtering
+        setCogs((prev) => {
+            const safePrev = Array.isArray(prev) ? prev : [];
+            return safePrev.filter((c) => c.id !== id);
+        });
     }, []);
 
     const getCogByProduct = useCallback(

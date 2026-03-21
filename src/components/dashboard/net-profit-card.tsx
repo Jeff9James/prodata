@@ -35,9 +35,12 @@ export function NetProfitCard({
         let totalCogs = 0;
         let totalEstimatedFees = 0;
 
+        // Ensure cogs is always an array
+        const safeCogs = Array.isArray(cogs) ? cogs : [];
+
         // Create a map for quick COGS lookup
         const cogsMap = new Map(
-            cogs.map((c) => [`${c.platform}-${c.productId}`, c])
+            safeCogs.map((c) => [`${c.platform}-${c.productId}`, c])
         );
 
         // Calculate per-sale COGS and fees
@@ -71,7 +74,7 @@ export function NetProfitCard({
             cogs: totalCogs,
             netProfit,
             profitMargin,
-            hasCogsConfigured: cogs.length > 0,
+            hasCogsConfigured: safeCogs.length > 0,
             calculatedFromSales: totalEstimatedFees > 0,
         };
     }, [cogs, salesData, platformFees, totalRevenue]);
@@ -108,10 +111,10 @@ export function NetProfitCard({
                 <div className="flex items-baseline gap-2">
                     <span
                         className={`text-2xl font-bold ${isBreakEven
-                                ? "text-muted-foreground"
-                                : isPositive
-                                    ? "text-green-600 dark:text-green-400"
-                                    : "text-destructive"
+                            ? "text-muted-foreground"
+                            : isPositive
+                                ? "text-green-600 dark:text-green-400"
+                                : "text-destructive"
                             }`}
                     >
                         {formatCurrency(profitData.netProfit, currency)}
